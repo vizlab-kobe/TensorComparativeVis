@@ -91,6 +91,7 @@ function Dashboard() {
     classWeights,
     initializeWeights,
     clusters,
+    resetClusters,
     scaledData,
     Ms,
     Mv,
@@ -129,6 +130,8 @@ function Dashboard() {
   const handleExecute = useCallback(async () => {
     if (classWeights.length === 0) return;
 
+    // Clear cluster selections before running new computation
+    resetClusters();
     setIsLoading(true);
 
     try {
@@ -170,7 +173,7 @@ function Dashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [classWeights, clusters, setIsLoading, setEmbeddingData, setAnalysisResults, setInterpretation, toast]);
+  }, [classWeights, clusters, resetClusters, setIsLoading, setEmbeddingData, setAnalysisResults, setInterpretation, toast]);
 
   // Auto-analyze when both clusters are selected
   useEffect(() => {

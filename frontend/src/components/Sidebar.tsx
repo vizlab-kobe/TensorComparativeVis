@@ -44,6 +44,8 @@ export function Sidebar({ onExecute, isLoading }: SidebarProps) {
         setSelectedClass,
         updateWeight,
         clusters,
+        clearCluster1,
+        clearCluster2,
         resetClusters,
     } = useDashboardStore();
 
@@ -88,13 +90,28 @@ export function Sidebar({ onExecute, isLoading }: SidebarProps) {
                                     <Circle size="10px" bg={COLORS.cluster1} />
                                     <Text fontSize="sm" color={COLORS.text}>Cluster 1</Text>
                                 </HStack>
-                                <Text
-                                    fontSize="xs"
-                                    color={clusters.cluster1 ? COLORS.cluster1 : COLORS.textMuted}
-                                    fontWeight="500"
-                                >
-                                    {clusters.cluster1 ? `${clusters.cluster1.length} pts` : '—'}
-                                </Text>
+                                <HStack spacing={2}>
+                                    <Text
+                                        fontSize="xs"
+                                        color={clusters.cluster1 ? COLORS.cluster1 : COLORS.textMuted}
+                                        fontWeight="500"
+                                    >
+                                        {clusters.cluster1 ? `${clusters.cluster1.length} pts` : '—'}
+                                    </Text>
+                                    {clusters.cluster1 && (
+                                        <Box
+                                            as="button"
+                                            fontSize="xs"
+                                            color={COLORS.textMuted}
+                                            _hover={{ color: COLORS.cluster1 }}
+                                            onClick={clearCluster1}
+                                            cursor="pointer"
+                                            title="Clear Cluster 1"
+                                        >
+                                            ✕
+                                        </Box>
+                                    )}
+                                </HStack>
                             </HStack>
                             <HStack
                                 p={3}
@@ -108,13 +125,28 @@ export function Sidebar({ onExecute, isLoading }: SidebarProps) {
                                     <Circle size="10px" bg={COLORS.cluster2} />
                                     <Text fontSize="sm" color={COLORS.text}>Cluster 2</Text>
                                 </HStack>
-                                <Text
-                                    fontSize="xs"
-                                    color={clusters.cluster2 ? COLORS.cluster2 : COLORS.textMuted}
-                                    fontWeight="500"
-                                >
-                                    {clusters.cluster2 ? `${clusters.cluster2.length} pts` : '—'}
-                                </Text>
+                                <HStack spacing={2}>
+                                    <Text
+                                        fontSize="xs"
+                                        color={clusters.cluster2 ? COLORS.cluster2 : COLORS.textMuted}
+                                        fontWeight="500"
+                                    >
+                                        {clusters.cluster2 ? `${clusters.cluster2.length} pts` : '—'}
+                                    </Text>
+                                    {clusters.cluster2 && (
+                                        <Box
+                                            as="button"
+                                            fontSize="xs"
+                                            color={COLORS.textMuted}
+                                            _hover={{ color: COLORS.cluster2 }}
+                                            onClick={clearCluster2}
+                                            cursor="pointer"
+                                            title="Clear Cluster 2"
+                                        >
+                                            ✕
+                                        </Box>
+                                    )}
+                                </HStack>
                             </HStack>
                         </VStack>
                         <Button
@@ -127,7 +159,7 @@ export function Sidebar({ onExecute, isLoading }: SidebarProps) {
                             color={COLORS.textSecondary}
                             _hover={{ bg: COLORS.bgSubtle }}
                         >
-                            Reset Selection
+                            Reset All
                         </Button>
                     </Box>
 

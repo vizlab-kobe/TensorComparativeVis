@@ -57,6 +57,8 @@ interface DashboardState {
     clusters: ClusterSelection;
     selectCluster1: (indices: number[]) => void;
     selectCluster2: (indices: number[]) => void;
+    clearCluster1: () => void;
+    clearCluster2: () => void;
     resetClusters: () => void;
 
     // Analysis results
@@ -145,6 +147,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     selectCluster2: (indices) =>
         set((state) => ({
             clusters: { ...state.clusters, cluster2: indices },
+        })),
+    clearCluster1: () =>
+        set((state) => ({
+            clusters: { ...state.clusters, cluster1: null },
+            topFeatures: null,
+            contributionMatrix: null,
+            interpretation: null,
+        })),
+    clearCluster2: () =>
+        set((state) => ({
+            clusters: { ...state.clusters, cluster2: null },
+            topFeatures: null,
+            contributionMatrix: null,
+            interpretation: null,
         })),
     resetClusters: () =>
         set({
