@@ -54,9 +54,7 @@ export async function analyzeClusters(
 export async function interpretClusters(
     topFeatures: FeatureImportance[],
     cluster1Size: number,
-    cluster2Size: number,
-    cluster1TimeSummary?: string,
-    cluster2TimeSummary?: string
+    cluster2Size: number
 ): Promise<InterpretationResponse> {
     const response = await api.post<InterpretationResponse>('/interpret-clusters', {
         top_features: topFeatures.map((f) => ({
@@ -69,8 +67,6 @@ export async function interpretClusters(
         })),
         cluster1_size: cluster1Size,
         cluster2_size: cluster2Size,
-        cluster1_time_summary: cluster1TimeSummary,
-        cluster2_time_summary: cluster2TimeSummary,
     });
     return response.data;
 }

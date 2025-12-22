@@ -1,6 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
-from enum import Enum
+from typing import List, Dict, Any
 
 
 class ClassWeight(BaseModel):
@@ -71,8 +70,6 @@ class InterpretationRequest(BaseModel):
     top_features: List[Dict[str, Any]]
     cluster1_size: int
     cluster2_size: int
-    cluster1_time_summary: Optional[str] = None
-    cluster2_time_summary: Optional[str] = None
 
 
 class InterpretationSection(BaseModel):
