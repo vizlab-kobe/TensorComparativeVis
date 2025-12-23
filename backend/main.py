@@ -206,9 +206,7 @@ async def interpret_clusters(request: InterpretationRequest):
         result = ai_interpreter.interpret(
             request.top_features,
             request.cluster1_size,
-            request.cluster2_size,
-            request.cluster1_time_summary,
-            request.cluster2_time_summary
+            request.cluster2_size
         )
         # Convert dict response to InterpretationResponse
         return InterpretationResponse(sections=result.get('sections', []))
