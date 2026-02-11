@@ -8,14 +8,15 @@ import * as d3 from 'd3';
 import { useDashboardStore } from '../store/dashboardStore';
 import type { EmbeddingPoint } from '../types';
 import { ScreenshotButton } from './ScreenshotButton';
+import { CLUSTER_COLORS, DEFAULT_CLASS_COLORS, UI_COLORS } from '../theme';
 
-// Tab10 colors for clusters (matplotlib tab10 palette)
+// Map theme colors to component usage
 const COLORS = {
-    class: ['#E07B54', '#5B8BD0', '#6BAF6B'],
-    cluster1: '#d62728',  // tab10 red
-    cluster2: '#1f77b4',  // tab10 blue
-    text: '#333',
-    textMuted: '#888',
+    class: DEFAULT_CLASS_COLORS,
+    cluster1: CLUSTER_COLORS.cluster1,
+    cluster2: CLUSTER_COLORS.cluster2,
+    text: UI_COLORS.text,
+    textMuted: UI_COLORS.textMuted,
 };
 
 export function ScatterPlot() {
@@ -214,7 +215,7 @@ export function ScatterPlot() {
                         {classColors.map((color, i) => (
                             <HStack key={i} spacing={1}>
                                 <Circle size="8px" bg={color} />
-                                <Text fontSize="10px" color="#888">FY{2014 + i}</Text>
+                                <Text fontSize="10px" color="#888">{config?.class_labels?.[i] || `Class ${i + 1}`}</Text>
                             </HStack>
                         ))}
                         <ScreenshotButton targetRef={panelRef} filename="scatter_plot" />

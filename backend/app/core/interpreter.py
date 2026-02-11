@@ -77,7 +77,6 @@ class GeminiInterpreter:
         
         # Location distribution
         racks = [f.get('rack', '') for f in features]
-        rack_counts = Counter(racks)
         
         # Statistical summary
         significant_count = sum(

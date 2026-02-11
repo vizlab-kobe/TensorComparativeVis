@@ -7,14 +7,15 @@ import { Box, Text, Center, HStack, Circle } from '@chakra-ui/react';
 import * as d3 from 'd3';
 import { useDashboardStore } from '../store/dashboardStore';
 import { ScreenshotButton } from './ScreenshotButton';
+import { CLUSTER_COLORS, UI_COLORS } from '../theme';
 
-// Tab10 color palette for clusters
+// Map theme colors to component usage
 const COLORS = {
-    positive: '#d62728',  // tab10 red - higher in cluster 1
-    negative: '#1f77b4',  // tab10 blue - higher in cluster 2
-    text: '#333',
-    textMuted: '#888',
-    bg: '#fafafa',
+    positive: CLUSTER_COLORS.cluster1,
+    negative: CLUSTER_COLORS.cluster2,
+    text: UI_COLORS.text,
+    textMuted: UI_COLORS.textMuted,
+    bg: UI_COLORS.bgSubtle,
 };
 
 export function FeatureRanking() {
@@ -117,7 +118,7 @@ export function FeatureRanking() {
             .text(d => d.label);
 
         // Value labels (on bars) - position inside if bar is too long
-        const chartRightEdge = innerWidth - 50; // Leave margin for labels
+        const chartRightEdge = width - 50; // Leave margin for labels
         bars.append('text')
             .attr('x', d => {
                 const barEnd = xScale(d.value);

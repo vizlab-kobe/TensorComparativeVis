@@ -3,6 +3,8 @@
 from .data_loader import DataLoader
 from .interpreter import GeminiInterpreter
 from .analysis import (
+    configure,
+    DomainProtocol,
     unfold_and_scale_tensor,
     apply_pacmap_reduction,
     analyze_tensor_contribution,
@@ -13,6 +15,8 @@ from .analysis import (
 __all__ = [
     'DataLoader',
     'GeminiInterpreter',
+    'configure',
+    'DomainProtocol',
     'unfold_and_scale_tensor',
     'apply_pacmap_reduction',
     'analyze_tensor_contribution',

@@ -1,22 +1,24 @@
 /**
  * Time Series Plot - Academic research theme
  * Responsive container with refined styling
+ * Supports mouse wheel zoom and pan
  */
-import { useEffect, useRef, useState } from 'react';
-import { Box, HStack, IconButton, Text, Circle, VStack } from '@chakra-ui/react';
-import { ChevronLeftIcon, ChevronRightIcon } from '@chakra-ui/icons';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Box, HStack, IconButton, Text, Circle, VStack, Tooltip } from '@chakra-ui/react';
+import { ChevronLeftIcon, ChevronRightIcon, RepeatIcon } from '@chakra-ui/icons';
 import * as d3 from 'd3';
 import { useDashboardStore } from '../store/dashboardStore';
 import { ScreenshotButton } from './ScreenshotButton';
+import { CLUSTER_COLORS, UI_COLORS } from '../theme';
 
-// Academic color palette - tab10 for clusters
+// Map theme colors to component usage
 const COLORS = {
-    cluster1: '#d62728',  // tab10 red
-    cluster2: '#1f77b4',  // tab10 blue
-    grid: '#f0f0f0',
-    axis: '#888',
-    text: '#333',
-    textMuted: '#888',
+    cluster1: CLUSTER_COLORS.cluster1,
+    cluster2: CLUSTER_COLORS.cluster2,
+    grid: UI_COLORS.grid,
+    axis: UI_COLORS.axis,
+    text: UI_COLORS.text,
+    textMuted: UI_COLORS.textMuted,
 };
 
 export function TimeSeriesPlot() {
@@ -26,11 +28,37 @@ export function TimeSeriesPlot() {
     const [dimensions, setDimensions] = useState({ width: 400, height: 250 });
     const { topFeatures, currentFeatureIndex, setCurrentFeatureIndex } = useDashboardStore();
 
+    // Zoom state
+    const [isZoomed, setIsZoomed] = useState(false);
+    const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+    const currentTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
+
     const margin = { top: 20, right: 20, bottom: 50, left: 55 };
     const innerWidth = dimensions.width - margin.left - margin.right;
     const innerHeight = dimensions.height - margin.top - margin.bottom;
 
     const feature = topFeatures?.[currentFeatureIndex];
+
+    // Reset zoom when feature changes
+    useEffect(() => {
+        if (svgRef.current && zoomRef.current) {
+            d3.select(svgRef.current).call(zoomRef.current.transform, d3.zoomIdentity);
+            currentTransformRef.current = d3.zoomIdentity;
+            setIsZoomed(false);
+        }
+    }, [currentFeatureIndex]);
+
+    // Reset zoom handler
+    const handleResetZoom = useCallback(() => {
+        if (svgRef.current && zoomRef.current) {
+            d3.select(svgRef.current)
+                .transition()
+                .duration(300)
+                .call(zoomRef.current.transform, d3.zoomIdentity);
+            currentTransformRef.current = d3.zoomIdentity;
+            setIsZoomed(false);
+        }
+    }, []);
 
     // Responsive sizing
     useEffect(() => {
@@ -97,110 +125,200 @@ export function TimeSeriesPlot() {
         const xScale = d3.scaleTime().domain(xExtent).range([0, innerWidth]);
         const yScale = d3.scaleLinear().domain([yExtent[0] - yPadding, yExtent[1] + yPadding]).range([innerHeight, 0]);
 
+        // Store original scales for zoom reset
+        const xScaleOriginal = xScale.copy();
+        const yScaleOriginal = yScale.copy();
+
+        // Create clip path for chart area
+        const clipId = 'chart-clip-' + Math.random().toString(36).substr(2, 9);
+        svg.append('defs').append('clipPath')
+            .attr('id', clipId)
+            .append('rect')
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('width', innerWidth)
+            .attr('height', innerHeight);
+
         const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-        // Grid lines
-        g.selectAll('line.grid')
-            .data(yScale.ticks(5))
-            .enter().append('line')
-            .attr('x1', 0).attr('x2', innerWidth)
-            .attr('y1', (d) => yScale(d)).attr('y2', (d) => yScale(d))
-            .attr('stroke', COLORS.grid);
+        // Chart content group with clip path
+        const chartArea = g.append('g').attr('clip-path', `url(#${clipId})`);
 
-        const line = d3.line<{ time: Date; value: number }>()
-            .x((d) => xScale(d.time))
-            .y((d) => yScale(d.value))
-            .curve(d3.curveMonotoneX);
+        // Grid lines group
+        const gridGroup = chartArea.append('g').attr('class', 'grid');
+
+        // Lines group
+        const linesGroup = chartArea.append('g').attr('class', 'lines');
+
+        // Points group
+        const pointsGroup = chartArea.append('g').attr('class', 'points');
+
+        // Axes groups
+        const xAxisGroup = g.append('g')
+            .attr('class', 'x-axis')
+            .attr('transform', `translate(0,${innerHeight})`);
+        const yAxisGroup = g.append('g').attr('class', 'y-axis');
 
         const sorted1 = [...cluster1Data].sort((a, b) => a.time.getTime() - b.time.getTime());
         const sorted2 = [...cluster2Data].sort((a, b) => a.time.getTime() - b.time.getTime());
 
-        // Lines
-        g.append('path')
-            .datum(sorted1)
-            .attr('fill', 'none')
-            .attr('stroke', COLORS.cluster1)
-            .attr('stroke-width', 2)
-            .attr('d', line);
+        // Function to update chart based on current scales
+        function updateChart(xS: d3.ScaleTime<number, number>, yS: d3.ScaleLinear<number, number>) {
+            // Update grid lines
+            gridGroup.selectAll('line.grid').remove();
+            gridGroup.selectAll('line.grid')
+                .data(yS.ticks(5))
+                .enter().append('line')
+                .attr('class', 'grid')
+                .attr('x1', 0).attr('x2', innerWidth)
+                .attr('y1', (d) => yS(d)).attr('y2', (d) => yS(d))
+                .attr('stroke', COLORS.grid);
 
-        g.append('path')
-            .datum(sorted2)
-            .attr('fill', 'none')
-            .attr('stroke', COLORS.cluster2)
-            .attr('stroke-width', 2)
-            .attr('d', line);
+            // Update line generator
+            const line = d3.line<{ time: Date; value: number }>()
+                .x((d) => xS(d.time))
+                .y((d) => yS(d.value))
+                .curve(d3.curveMonotoneX);
 
-        // Points - smaller for better visibility with dense data
-        g.selectAll('.p1')
-            .data(cluster1Data)
-            .enter().append('circle')
-            .attr('cx', (d) => xScale(d.time))
-            .attr('cy', (d) => yScale(d.value))
-            .attr('r', 2)
-            .attr('fill', COLORS.cluster1)
-            .attr('stroke', 'white')
-            .attr('stroke-width', 0.5)
-            .attr('opacity', 0.8)
-            .style('cursor', 'pointer')
-            .on('mouseover', function (event, d) {
-                d3.select(this).attr('r', 4).attr('stroke-width', 1.5);
-                tooltip
-                    .style('opacity', 1)
-                    .html(`<strong>Cluster 1</strong><br/>Time: ${d3.timeFormat('%Y-%m-%d %H:%M')(d.time)}<br/>Value: ${d.value.toFixed(3)}`)
-                    .style('left', (event.pageX + 10) + 'px')
-                    .style('top', (event.pageY - 28) + 'px');
-            })
-            .on('mouseout', function () {
-                d3.select(this).attr('r', 2).attr('stroke-width', 0.5);
-                tooltip.style('opacity', 0);
+            // Update lines
+            linesGroup.selectAll('path').remove();
+            linesGroup.append('path')
+                .datum(sorted1)
+                .attr('fill', 'none')
+                .attr('stroke', COLORS.cluster1)
+                .attr('stroke-width', 2)
+                .attr('d', line);
+
+            linesGroup.append('path')
+                .datum(sorted2)
+                .attr('fill', 'none')
+                .attr('stroke', COLORS.cluster2)
+                .attr('stroke-width', 2)
+                .attr('d', line);
+
+            // Update points
+            pointsGroup.selectAll('circle').remove();
+
+            pointsGroup.selectAll('.p1')
+                .data(cluster1Data)
+                .enter().append('circle')
+                .attr('class', 'p1')
+                .attr('cx', (d) => xS(d.time))
+                .attr('cy', (d) => yS(d.value))
+                .attr('r', 2)
+                .attr('fill', COLORS.cluster1)
+                .attr('stroke', 'white')
+                .attr('stroke-width', 0.5)
+                .attr('opacity', 0.8)
+                .style('cursor', 'pointer')
+                .on('mouseover', function (event, d) {
+                    d3.select(this).attr('r', 4).attr('stroke-width', 1.5);
+                    tooltip
+                        .style('opacity', 1)
+                        .html(`<strong>Cluster 1</strong><br/>Time: ${d3.timeFormat('%Y-%m-%d %H:%M')(d.time)}<br/>Value: ${d.value.toFixed(3)}`)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 28) + 'px');
+                })
+                .on('mouseout', function () {
+                    d3.select(this).attr('r', 2).attr('stroke-width', 0.5);
+                    tooltip.style('opacity', 0);
+                });
+
+            pointsGroup.selectAll('.p2')
+                .data(cluster2Data)
+                .enter().append('circle')
+                .attr('class', 'p2')
+                .attr('cx', (d) => xS(d.time))
+                .attr('cy', (d) => yS(d.value))
+                .attr('r', 2)
+                .attr('fill', COLORS.cluster2)
+                .attr('stroke', 'white')
+                .attr('stroke-width', 0.5)
+                .attr('opacity', 0.8)
+                .style('cursor', 'pointer')
+                .on('mouseover', function (event, d) {
+                    d3.select(this).attr('r', 4).attr('stroke-width', 1.5);
+                    tooltip
+                        .style('opacity', 1)
+                        .html(`<strong>Cluster 2</strong><br/>Time: ${d3.timeFormat('%Y-%m-%d %H:%M')(d.time)}<br/>Value: ${d.value.toFixed(3)}`)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 28) + 'px');
+                })
+                .on('mouseout', function () {
+                    d3.select(this).attr('r', 2).attr('stroke-width', 0.5);
+                    tooltip.style('opacity', 0);
+                });
+
+            // Update axes
+            const xAxis = d3.axisBottom(xS).ticks(5).tickFormat(d3.timeFormat('%Y-%m') as any);
+            const yAxis = d3.axisLeft(yS).ticks(5);
+
+            xAxisGroup.call(xAxis)
+                .call(g => g.select('.domain').attr('stroke', '#ddd'))
+                .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
+                .call(g => g.selectAll('.tick text')
+                    .attr('fill', COLORS.textMuted)
+                    .attr('font-size', '10px')
+                    .attr('transform', 'rotate(-30)')
+                    .attr('text-anchor', 'end'));
+
+            yAxisGroup.call(yAxis)
+                .call(g => g.select('.domain').attr('stroke', '#ddd'))
+                .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
+                .call(g => g.selectAll('.tick text').attr('fill', COLORS.textMuted).attr('font-size', '10px'));
+        }
+
+        // Initial render
+        updateChart(xScale, yScale);
+
+        // Setup zoom behavior
+        const zoom = d3.zoom<SVGSVGElement, unknown>()
+            .scaleExtent([1, 20])
+            .translateExtent([[0, 0], [dimensions.width, dimensions.height]])
+            .extent([[0, 0], [dimensions.width, dimensions.height]])
+            .on('zoom', (event) => {
+                const transform = event.transform;
+                currentTransformRef.current = transform;
+
+                // Rescale axes based on zoom transform
+                const newXScale = transform.rescaleX(xScaleOriginal);
+                const newYScale = transform.rescaleY(yScaleOriginal);
+
+                updateChart(newXScale, newYScale);
+
+                // Update zoom state
+                setIsZoomed(transform.k !== 1 || transform.x !== 0 || transform.y !== 0);
             });
 
-        g.selectAll('.p2')
-            .data(cluster2Data)
-            .enter().append('circle')
-            .attr('cx', (d) => xScale(d.time))
-            .attr('cy', (d) => yScale(d.value))
-            .attr('r', 2)
-            .attr('fill', COLORS.cluster2)
-            .attr('stroke', 'white')
-            .attr('stroke-width', 0.5)
-            .attr('opacity', 0.8)
-            .style('cursor', 'pointer')
-            .on('mouseover', function (event, d) {
-                d3.select(this).attr('r', 4).attr('stroke-width', 1.5);
-                tooltip
-                    .style('opacity', 1)
-                    .html(`<strong>Cluster 2</strong><br/>Time: ${d3.timeFormat('%Y-%m-%d %H:%M')(d.time)}<br/>Value: ${d.value.toFixed(3)}`)
-                    .style('left', (event.pageX + 10) + 'px')
-                    .style('top', (event.pageY - 28) + 'px');
-            })
-            .on('mouseout', function () {
-                d3.select(this).attr('r', 2).attr('stroke-width', 0.5);
-                tooltip.style('opacity', 0);
-            });
+        zoomRef.current = zoom;
+        svg.call(zoom);
 
-        // Axes
-        const xAxis = d3.axisBottom(xScale).ticks(5).tickFormat(d3.timeFormat('%Y-%m') as any);
-        const yAxis = d3.axisLeft(yScale).ticks(5);
+        // Apply current transform if exists
+        if (currentTransformRef.current && currentTransformRef.current.k !== 1) {
+            svg.call(zoom.transform, currentTransformRef.current);
+        }
 
-        g.append('g')
-            .attr('transform', `translate(0,${innerHeight})`)
-            .call(xAxis)
-            .call(g => g.select('.domain').attr('stroke', '#ddd'))
-            .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
-            .call(g => g.selectAll('.tick text')
-                .attr('fill', COLORS.textMuted)
-                .attr('font-size', '10px')
-                .attr('transform', 'rotate(-30)')
-                .attr('text-anchor', 'end'));
+        // Add zoom hint overlay (appears on hover)
+        const hintGroup = g.append('g').attr('class', 'zoom-hint').style('opacity', 0);
+        hintGroup.append('rect')
+            .attr('x', innerWidth - 120)
+            .attr('y', 5)
+            .attr('width', 115)
+            .attr('height', 20)
+            .attr('rx', 3)
+            .attr('fill', 'rgba(0,0,0,0.6)');
+        hintGroup.append('text')
+            .attr('x', innerWidth - 62)
+            .attr('y', 18)
+            .attr('text-anchor', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', '10px')
+            .text('Scroll to zoom, drag to pan');
 
-        g.append('g')
-            .call(yAxis)
-            .call(g => g.select('.domain').attr('stroke', '#ddd'))
-            .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
-            .call(g => g.selectAll('.tick text').attr('fill', COLORS.textMuted).attr('font-size', '10px'));
+        svg.on('mouseenter', () => hintGroup.transition().duration(200).style('opacity', 1));
+        svg.on('mouseleave', () => hintGroup.transition().duration(200).style('opacity', 0));
 
-    }, [feature, innerWidth, innerHeight, margin]);
+    }, [feature, innerWidth, innerHeight, margin, dimensions.width, dimensions.height]);
 
     if (!topFeatures || topFeatures.length === 0) {
         return (
@@ -263,6 +381,18 @@ export function TimeSeriesPlot() {
                             <Circle size="8px" bg={COLORS.cluster2} />
                             <Text fontSize="10px" color="#888">Cluster 2</Text>
                         </HStack>
+                        {isZoomed && (
+                            <Tooltip label="Reset zoom" placement="top" hasArrow>
+                                <IconButton
+                                    aria-label="Reset zoom"
+                                    icon={<RepeatIcon />}
+                                    size="xs"
+                                    variant="ghost"
+                                    colorScheme="blue"
+                                    onClick={handleResetZoom}
+                                />
+                            </Tooltip>
+                        )}
                         <ScreenshotButton targetRef={panelRef} filename="time_series" />
                     </HStack>
                 </HStack>

@@ -11,11 +11,12 @@ import type { Topology, GeometryCollection } from 'topojson-specification';
 import { useDashboardStore } from '../store/dashboardStore';
 import { getCoordinates, type Coordinate } from '../api/client';
 import { ScreenshotButton } from './ScreenshotButton';
+import { UI_COLORS } from '../theme';
 
 const COLORS = {
-    text: '#333',
-    textMuted: '#888',
-    land: '#f0f0f0',
+    text: UI_COLORS.text,
+    textMuted: UI_COLORS.textMuted,
+    land: UI_COLORS.grid,     // reuse grid color for map land
     border: '#ccc',
     stateBorder: '#ddd',
 };

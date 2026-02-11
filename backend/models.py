@@ -112,3 +112,4 @@ class ConfigResponse(BaseModel):
     grid_shape: List[int]
     colors: Dict[str, Any]  # Contains both strings and lists
     visualization_type: str = "grid"  # "grid" or "geo_map"
+    class_labels: List[str] = []  # Domain-specific class labels for legend

@@ -142,6 +142,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
     // Cluster selection
     clusters: { cluster1: null, cluster2: null },
+    // Intentionally resets cluster2: selecting a new C1 starts a fresh comparison
     selectCluster1: (indices) =>
         set({ clusters: { cluster1: indices, cluster2: null } }),
     selectCluster2: (indices) =>

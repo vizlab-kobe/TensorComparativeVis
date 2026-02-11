@@ -17,18 +17,19 @@ import {
     Circle,
 } from '@chakra-ui/react';
 import { useDashboardStore } from '../store/dashboardStore';
+import { CLUSTER_COLORS, UI_COLORS } from '../theme';
 
-// Academic color palette - UI uses gray, data uses colors
+// Map theme colors to component usage
 const COLORS = {
-    cluster1: '#d62728',  // tab10 red
-    cluster2: '#1f77b4',  // tab10 blue
-    accent: '#555',       // Gray for UI elements
-    accentHover: '#444',
-    text: '#333',
-    textSecondary: '#666',
-    textMuted: '#888',
-    border: '#e0e0e0',
-    bgSubtle: '#fafafa',
+    cluster1: CLUSTER_COLORS.cluster1,
+    cluster2: CLUSTER_COLORS.cluster2,
+    accent: UI_COLORS.accent,
+    accentHover: UI_COLORS.accentHover,
+    text: UI_COLORS.text,
+    textSecondary: UI_COLORS.textSecondary,
+    textMuted: UI_COLORS.textMuted,
+    border: UI_COLORS.border,
+    bgSubtle: UI_COLORS.bgSubtle,
 };
 
 interface SidebarProps {

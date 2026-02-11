@@ -7,13 +7,29 @@ import numpy as np
 from scipy import stats
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Protocol, runtime_checkable
 import pacmap
 import warnings
 
 
-# Random Forest parameters (can be overridden by config)
-RF_PARAMS = {
+# ── Domain Protocol (structural typing for domain parameter) ──────────────
+
+@runtime_checkable
+class DomainProtocol(Protocol):
+    """Structural type for domain objects used by analysis functions."""
+
+    @property
+    def variables(self) -> List[str]: ...
+
+    @property
+    def grid_shape(self) -> Tuple[int, int]: ...
+
+    def index_to_label(self, index: int) -> str: ...
+
+
+# ── Configurable ML parameters ───────────────────────────────────────────
+
+_RF_DEFAULTS: Dict = {
     'n_estimators': 300,
     'max_depth': 12,
     'min_samples_leaf': 10,
@@ -22,14 +38,34 @@ RF_PARAMS = {
     'bootstrap': True,
     'oob_score': True,
     'n_jobs': -1,
-    'random_state': 42
+    'random_state': 42,
 }
 
-# PaCMAP parameters (can be overridden by config)
-PACMAP_PARAMS = {
+_PACMAP_DEFAULTS: Dict = {
     'n_components': 2,
-    'n_neighbors': None
+    'n_neighbors': None,
 }
+
+# Mutable runtime copies (updated by configure())
+RF_PARAMS: Dict = {**_RF_DEFAULTS}
+PACMAP_PARAMS: Dict = {**_PACMAP_DEFAULTS}
+
+
+def configure(
+    *,
+    random_forest: Optional[Dict] = None,
+    pacmap_params: Optional[Dict] = None,
+) -> None:
+    """Apply external configuration (from YAML) to ML parameters.
+    
+    Called once at app startup from main_new.py.
+    Only keys present in the override dict are merged; others keep defaults.
+    """
+    global RF_PARAMS, PACMAP_PARAMS
+    if random_forest:
+        RF_PARAMS = {**_RF_DEFAULTS, **random_forest}
+    if pacmap_params:
+        PACMAP_PARAMS = {**_PACMAP_DEFAULTS, **pacmap_params}
 
 
 def unfold_and_scale_tensor(tensor: np.ndarray) -> Tuple[np.ndarray, StandardScaler]:
@@ -112,7 +148,7 @@ def standardize_contributions(contribution_matrix: np.ndarray) -> np.ndarray:
 
 def get_top_important_factors(
     contribution_matrix: np.ndarray,
-    domain,  # Domain strategy for variable names and label conversion
+    domain: DomainProtocol,
     top_k: int = 10
 ) -> List[Dict]:
     """Get top important factors sorted by importance."""
@@ -159,7 +195,7 @@ def evaluate_statistical_significance(
     rack_idx: int,
     var_idx: int,
     original_data: np.ndarray,
-    domain  # Domain strategy for label conversion
+    domain: DomainProtocol
 ) -> Dict:
     """Evaluate statistical significance between two clusters."""
     time_series = original_data[:, rack_idx, var_idx]

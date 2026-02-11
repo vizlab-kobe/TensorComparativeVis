@@ -115,23 +115,28 @@ class AirDataDomain(BaseDomain):
 - Seasonal variations are expected due to weather patterns and human activity cycles
 - Ozone tends to peak in summer; PM levels may rise in winter or during wildfire seasons
 """
+    # ── Domain vocabulary hooks ──
     
-    def _format_features(self, features: List[Dict]) -> str:
-        """Format features for prompt."""
-        lines = []
-        for f in features:
-            stat = f.get('statistical_result', {})
-            direction = "higher in C1" if stat.get('mean_diff', 0) > 0 else "lower in C1"
-            sig = "*" if stat.get('p_value', 1) < 0.05 else ("+" if stat.get('p_value', 1) < 0.1 else "")
-            effect = stat.get('effect_size', 'N/A')
-            
-            lines.append(
-                f"- {f.get('rack', 'N/A')}/{f.get('variable', 'N/A')}: "
-                f"score={f.get('score', 0):.3f}, {direction}, "
-                f"effect={effect}{sig}"
-            )
-        return "\n".join(lines)
-    
+    @property
+    def class_labels(self) -> List[str]:
+        return ["Q1", "Q2", "Q3", "Q4"]
+
+    @property
+    def _system_label(self) -> str:
+        return "US air quality data"
+
+    @property
+    def _time_unit(self) -> str:
+        return "weekly observations"
+
+    @property
+    def _variable_noun(self) -> str:
+        return "pollutants"
+
+    @property
+    def _location_noun(self) -> str:
+        return "stations"
+
     def build_interpretation_prompt(
         self,
         top_features: List[Dict],
@@ -194,71 +199,4 @@ Do NOT use any special formatting like brackets or markdown. Write in plain text
 - Focus on DESCRIBING patterns, not explaining causation
 - Do NOT use brackets, asterisks, arrows, or any special formatting - plain text only
 """
-    
-    def build_comparison_prompt(
-        self,
-        analysis_a: Dict[str, Any],
-        analysis_b: Dict[str, Any]
-    ) -> str:
-        """Build LLM prompt for comparing two air quality analyses."""
-        same_cluster1 = analysis_a.get('cluster1_size') == analysis_b.get('cluster1_size')
-        same_cluster2 = analysis_a.get('cluster2_size') == analysis_b.get('cluster2_size')
-        
-        if same_cluster1 and same_cluster2:
-            context_msg = "Both analyses use IDENTICAL cluster selections."
-        elif same_cluster1:
-            context_msg = "Both analyses share the SAME Red Cluster (C1). The comparison involves different Blue Cluster (C2) selections."
-        elif same_cluster2:
-            context_msg = "Both analyses share the SAME Blue Cluster (C2). The comparison involves different Red Cluster (C1) selections."
-        else:
-            context_msg = "The analyses use completely different cluster selections."
-        
-        features_a = analysis_a.get('top_features', [])[:10]
-        features_b = analysis_b.get('top_features', [])[:10]
-        
-        feature_set_a = set(f"{f.get('rack')}-{f.get('variable')}" for f in features_a)
-        feature_set_b = set(f"{f.get('rack')}-{f.get('variable')}" for f in features_b)
-        
-        common = feature_set_a & feature_set_b
-        only_a = feature_set_a - feature_set_b
-        only_b = feature_set_b - feature_set_a
-        
-        return f"""
-You are comparing two cluster analysis results from a US air quality data visualization system.
 
-## Comparison Context
-{context_msg}
-
-## Analysis A
-- Red Cluster size: {analysis_a.get('cluster1_size')} weekly observations
-- Blue Cluster size: {analysis_a.get('cluster2_size')} weekly observations
-- Significant features: {analysis_a.get('significant_count', 'N/A')}
-- Top pollutants: {', '.join(analysis_a.get('top_variables', [])[:5])}
-- Top stations: {', '.join(analysis_a.get('top_racks', [])[:5])}
-
-## Analysis B
-- Red Cluster size: {analysis_b.get('cluster1_size')} weekly observations
-- Blue Cluster size: {analysis_b.get('cluster2_size')} weekly observations
-- Significant features: {analysis_b.get('significant_count', 'N/A')}
-- Top pollutants: {', '.join(analysis_b.get('top_variables', [])[:5])}
-- Top stations: {', '.join(analysis_b.get('top_racks', [])[:5])}
-
-## Feature Overlap
-- Common: {len(common)} - {list(common)[:5]}
-- Only in A: {len(only_a)} - {list(only_a)[:5]}
-- Only in B: {len(only_b)} - {list(only_b)[:5]}
-
-Generate a JSON comparison:
-{{
-  "sections": [
-    {{"title": "Comparison Overview", "text": "...", "highlights": []}},
-    {{"title": "Feature Differences", "text": "...", "highlights": []}},
-    {{"title": "Implications", "text": "...", "highlights": []}}
-  ]
-}}
-
-## Requirements
-- Output ONLY valid JSON, no other text
-- Text in ENGLISH, 2-3 sentences each
-- Do NOT use brackets, asterisks, or markdown formatting
-"""

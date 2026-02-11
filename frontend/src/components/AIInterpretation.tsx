@@ -26,33 +26,17 @@ import { useDashboardStore } from '../store/dashboardStore';
 import type { SavedAnalysis } from '../store/dashboardStore';
 import type { InterpretationSection } from '../types';
 import { ScreenshotButton } from './ScreenshotButton';
+import { CLUSTER_COLORS, UI_COLORS, getSectionColor } from '../theme';
 
-// Tab10 color palette for clusters
+// Map theme colors to component usage
 const COLORS = {
-    cluster1: '#d62728',  // tab10 red
-    cluster2: '#1f77b4',  // tab10 blue
-    green: '#6BAF6B',
-    purple: '#9467bd',
-    text: '#333',
-    textSecondary: '#666',
-    textMuted: '#888',
-    border: '#e0e0e0',
+    cluster1: CLUSTER_COLORS.cluster1,
+    cluster2: CLUSTER_COLORS.cluster2,
+    text: UI_COLORS.text,
+    textSecondary: UI_COLORS.textSecondary,
+    textMuted: UI_COLORS.textMuted,
+    border: UI_COLORS.border,
 };
-
-const SECTION_COLORS: Record<string, string> = {
-    'key findings': '#2d9596',      // teal (avoid red)
-    'pattern analysis': COLORS.green,
-    'statistical summary': '#9467bd', // purple (avoid blue)
-    'caveats': '#8c564b',           // brown
-};
-
-function getSectionColor(title: string): string {
-    const lowerTitle = title.toLowerCase();
-    for (const [key, color] of Object.entries(SECTION_COLORS)) {
-        if (lowerTitle.includes(key)) return color;
-    }
-    return COLORS.textMuted;
-}
 
 // Render text - remove brackets but display as plain text (no highlighting)
 function renderPlainText(text: string) {
@@ -346,13 +330,15 @@ function CompareTab() {
                 </HStack>
 
                 {/* Base Cluster Indicator */}
-                {sameBaseCluster && (
-                    <Box p={2} bg="blue.50" borderRadius="4px" border="1px solid" borderColor="blue.200">
-                        <Text fontSize="10px" color="blue.700">
-                            ✓ Same base cluster (Red: {analysis1.cluster1_size} pts)
-                        </Text>
-                    </Box>
-                )}
+                {
+                    sameBaseCluster && (
+                        <Box p={2} bg="blue.50" borderRadius="4px" border="1px solid" borderColor="blue.200">
+                            <Text fontSize="10px" color="blue.700">
+                                ✓ Same base cluster (Red: {analysis1.cluster1_size} pts)
+                            </Text>
+                        </Box>
+                    )
+                }
 
                 {/* Overview */}
                 <Grid templateColumns="1fr 1fr" gap={2}>
@@ -458,7 +444,7 @@ function CompareTab() {
                         </Box>
                     )}
                 </Box>
-            </VStack>
+            </VStack >
         </Box >
     );
 }

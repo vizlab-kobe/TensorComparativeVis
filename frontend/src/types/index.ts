@@ -1,5 +1,5 @@
 /**
- * TypeScript type definitions for HPC Dashboard
+ * TypeScript type definitions for Tensor Comparative Visualization
  */
 
 // API Response Types
@@ -57,6 +57,7 @@ export interface ConfigResponse {
         cluster2: string;
     };
     visualization_type: 'grid' | 'geo_map';
+    class_labels: string[];
 }
 
 // Internal State Types
