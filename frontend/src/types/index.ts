@@ -56,6 +56,7 @@ export interface ConfigResponse {
         cluster1: string;
         cluster2: string;
     };
+    visualization_type: 'grid' | 'geo_map';
 }
 
 // Internal State Types

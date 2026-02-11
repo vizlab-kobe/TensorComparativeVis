@@ -97,8 +97,18 @@ async def get_config():
         variables=domain.variables,
         n_classes=data_loader.n_classes,
         grid_shape=list(domain.grid_shape),
-        colors=COLORS
+        colors=COLORS,
+        visualization_type=domain.visualization_type
     )
+
+
+@app.get("/api/coordinates")
+async def get_coordinates():
+    """Get spatial coordinates for geo_map visualization."""
+    coords = domain.get_coordinates()
+    if not coords:
+        return {"coordinates": [], "available": False}
+    return {"coordinates": coords, "available": True}
 
 
 @app.post("/api/compute-embedding", response_model=ComputeEmbeddingResponse)

@@ -36,6 +36,26 @@ class AirDataDomain(BaseDomain):
         return (55, 5)
     
     @property
+    def visualization_type(self) -> str:
+        """AirData uses geographic map visualization."""
+        return "geo_map"
+    
+    def get_coordinates(self) -> List[Dict[str, Any]]:
+        """Return station coordinates for map visualization."""
+        coords = self._load_coordinates()
+        if coords is None:
+            return []
+        result = []
+        for i, row in enumerate(coords):
+            result.append({
+                "index": i,
+                "lat": float(row[0]),
+                "lon": float(row[1]),
+                "name": str(row[2])
+            })
+        return result
+    
+    @property
     def file_mapping(self) -> Dict[str, str]:
         """Map logical file names to actual file names on disk."""
         return {

@@ -20,7 +20,7 @@ import {
   Sidebar,
   ScatterPlot,
   FeatureRanking,
-  Heatmap,
+  SpatialVisualization,
   TimeSeriesPlot,
   AIInterpretation,
 } from './components';
@@ -272,7 +272,7 @@ function Dashboard() {
                     <FeatureRanking />
                   </TabPanel>
                   <TabPanel p={0} h="100%">
-                    <Heatmap />
+                    <SpatialVisualization />
                   </TabPanel>
                 </TabPanels>
               </Tabs>

@@ -111,3 +111,4 @@ class ConfigResponse(BaseModel):
     n_classes: int
     grid_shape: List[int]
     colors: Dict[str, Any]  # Contains both strings and lists
+    visualization_type: str = "grid"  # "grid" or "geo_map"

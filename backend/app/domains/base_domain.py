@@ -76,3 +76,17 @@ class BaseDomain(ABC):
             "title": f"{self.name} Analysis Dashboard",
             "description": "Tensor-based comparative analysis"
         }
+    
+    @property
+    def visualization_type(self) -> str:
+        """Spatial visualization type: 'grid' for heatmap, 'geo_map' for geographic map."""
+        return "grid"
+    
+    def get_coordinates(self) -> List[Dict[str, Any]]:
+        """Return spatial coordinates for geo_map visualization.
+        Override in subclasses that use geo_map visualization.
+        
+        Returns:
+            List of dicts: [{"index": 0, "lat": ..., "lon": ..., "name": "..."}]
+        """
+        return []

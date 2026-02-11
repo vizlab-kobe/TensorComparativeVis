@@ -25,6 +25,18 @@ export async function getConfig(): Promise<ConfigResponse> {
     return response.data;
 }
 
+export interface Coordinate {
+    index: number;
+    lat: number;
+    lon: number;
+    name: string;
+}
+
+export async function getCoordinates(): Promise<{ coordinates: Coordinate[]; available: boolean }> {
+    const response = await api.get<{ coordinates: Coordinate[]; available: boolean }>('/coordinates');
+    return response.data;
+}
+
 export async function computeEmbedding(
     classWeights: ClassWeight[]
 ): Promise<ComputeEmbeddingResponse> {
