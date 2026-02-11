@@ -1,0 +1,21 @@
+# Application Config: US Air Quality Data
+# Weekly air quality measurements from 55 monitoring stations across the US (2018)
+
+domain: air_data
+
+# TULCA parameters
+tulca:
+  s_prime: 10
+  v_prime: 3
+  optimization_method: evd
+
+# UI colors
+colors:
+  class_colors: ["#2196F3", "#4CAF50", "#FF9800"]
+  cluster1: "#E53935"
+  cluster2: "#1E88E5"
+
+# CORS origins
+cors_origins:
+  - "http://localhost:5173"
+  - "http://localhost:3000"

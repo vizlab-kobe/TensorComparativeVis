@@ -26,13 +26,20 @@ class DataLoader:
     
     def load_all(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Load all data files and return them."""
-        # Generic file names (domain-independent)
-        prefix = f"{self.domain.name}_"
+        # Use domain file_mapping if available, otherwise fall back to prefix convention
+        fm = getattr(self.domain, 'file_mapping', None)
         
-        self._original_data = np.load(self.data_dir / f"{prefix}time_original.npy")
-        self._time_axis = np.load(self.data_dir / f"{prefix}time_axis.npy")
-        self._tensor_X = np.load(self.data_dir / f"{prefix}tensor_X.npy")
-        self._tensor_y = np.load(self.data_dir / f"{prefix}tensor_y.npy")
+        if fm:
+            self._tensor_X = np.load(self.data_dir / fm['tensor_X'])
+            self._tensor_y = np.load(self.data_dir / fm['tensor_y'], allow_pickle=True)
+            self._time_axis = np.load(self.data_dir / fm['time_axis'], allow_pickle=True)
+            self._original_data = np.load(self.data_dir / fm['time_original'])
+        else:
+            prefix = f"{self.domain.name}_"
+            self._tensor_X = np.load(self.data_dir / f"{prefix}tensor_X.npy")
+            self._tensor_y = np.load(self.data_dir / f"{prefix}tensor_y.npy")
+            self._time_axis = np.load(self.data_dir / f"{prefix}time_axis.npy")
+            self._original_data = np.load(self.data_dir / f"{prefix}time_original.npy")
         
         return self._original_data, self._time_axis, self._tensor_X, self._tensor_y
     

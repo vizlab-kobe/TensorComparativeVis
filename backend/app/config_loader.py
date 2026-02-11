@@ -44,8 +44,15 @@ def get_domain_instance(config: Dict[str, Any]):
     """
     domain_name = config.get('domain', 'hpc').lower()
     
+    # Resolve data_dir for domains that need it
+    project_root = Path(__file__).parent.parent.parent
+    
     if domain_name == 'hpc':
         from app.domains import HPCDomain
         return HPCDomain()
+    elif domain_name in ('air_data', 'airdata'):
+        from app.domains import AirDataDomain
+        data_dir = str(project_root / "data" / "processed" / "AirData")
+        return AirDataDomain(data_dir=data_dir)
     else:
         raise ValueError(f"Unknown domain: {domain_name}")

@@ -24,6 +24,16 @@ class HPCDomain(BaseDomain):
         return "data/processed/HPC"
     
     @property
+    def file_mapping(self) -> Dict[str, str]:
+        """Map logical file names to actual file names on disk."""
+        return {
+            'tensor_X': 'HPC_tensor_X.npy',
+            'tensor_y': 'HPC_tensor_y.npy',
+            'time_axis': 'HPC_time_axis.npy',
+            'time_original': 'HPC_time_original.npy',
+        }
+    
+    @property
     def variables(self) -> List[str]:
         return self._VARIABLES
     
