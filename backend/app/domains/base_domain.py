@@ -1,5 +1,14 @@
 """
-Base Domain Strategy - Abstract interface for domain-specific configurations.
+ドメイン戦略 基底クラス
+
+全ドメイン固有設定の抽象インターフェースを定義する。
+新しいデータドメインを追加する場合は、このクラスを継承して
+全ての抽象メソッド・プロパティを実装する。
+
+設計方針:
+  - 抽象部分: データ固有の設定（変数名、ラベル変換、プロンプト構築）
+  - 具象部分: 共通処理（特徴量フォーマット、比較プロンプト、語彙フック）
+  - 語彙フック: プロンプト内のドメイン固有表現をサブクラスで上書き可能
 """
 
 from abc import ABC, abstractmethod
@@ -7,100 +16,147 @@ from typing import List, Tuple, Dict, Any
 
 
 class BaseDomain(ABC):
-    """Abstract base class for domain-specific configurations."""
-    
+    """ドメイン戦略の抽象基底クラス。
+
+    各ドメイン（HPC、大気データ等）はこのクラスを継承し、
+    固有のデータ構造・可視化設定・LLMプロンプトを提供する。
+    """
+
+    # ── 抽象プロパティ（全サブクラスで実装必須） ──────────────────────────────
+
     @property
     @abstractmethod
     def name(self) -> str:
-        """Domain name for identification."""
+        """ドメイン識別名（例: "HPC", "AirData"）"""
         pass
-    
+
     @property
     @abstractmethod
     def data_dir(self) -> str:
-        """Relative path to data directory from project root."""
+        """プロジェクトルートからの相対データディレクトリパス"""
         pass
-    
+
     @property
     @abstractmethod
     def variables(self) -> List[str]:
-        """List of variable names in the dataset."""
+        """データセットの変数名リスト（例: ['AirIn', 'AirOut', 'CPU', 'Water']）"""
         pass
-    
+
     @property
     @abstractmethod
     def grid_shape(self) -> Tuple[int, int]:
-        """Grid shape for spatial visualization (rows, cols)."""
+        """空間可視化のグリッド形状 (行数, 列数)"""
         pass
-    
+
+    # ── 抽象メソッド（全サブクラスで実装必須） ────────────────────────────────
+
     @abstractmethod
     def index_to_label(self, index: int) -> str:
-        """Convert spatial index to human-readable label."""
+        """空間インデックスを人間可読ラベルに変換する。
+
+        Args:
+            index: 空間次元のフラットインデックス
+
+        Returns:
+            人間可読ラベル（例: "A1", "Station-5"）
+        """
         pass
-    
+
     @abstractmethod
     def label_to_index(self, label: str) -> int:
-        """Convert human-readable label to spatial index."""
+        """人間可読ラベルを空間インデックスに逆変換する。
+
+        Args:
+            label: 人間可読ラベル
+
+        Returns:
+            空間次元のフラットインデックス
+        """
         pass
-    
+
     @property
     @abstractmethod
     def domain_knowledge(self) -> str:
-        """Domain knowledge text for LLM context."""
+        """LLMプロンプトに埋め込むドメイン知識テキスト"""
         pass
-    
+
     @abstractmethod
     def build_interpretation_prompt(
         self,
         top_features: List[Dict],
         cluster1_size: int,
         cluster2_size: int,
-        preprocessed: Dict[str, Any]
+        preprocessed: Dict[str, Any],
     ) -> str:
-        """Build LLM prompt for cluster interpretation."""
+        """クラスター解釈用のLLMプロンプトを構築する。
+
+        Args:
+            top_features: 上位特徴量のリスト
+            cluster1_size: 赤クラスターのサンプル数
+            cluster2_size: 青クラスターのサンプル数
+            preprocessed: 前処理済み統計情報
+
+        Returns:
+            LLMに送信するプロンプト文字列
+        """
         pass
-    
-    # ── Domain vocabulary hooks (override in subclasses for domain-specific wording) ──
+
+    # ── 語彙フック（サブクラスで上書き可能） ──────────────────────────────────
 
     @property
     def class_labels(self) -> List[str]:
-        """Human-readable labels for each class in the dataset.
-        Override in subclasses for domain-specific labels.
-        Default: Class 1, Class 2, ...
+        """データセット内の各クラスの人間可読ラベル。
+
+        空リストの場合、フロントエンドは汎用ラベルに
+        フォールバックする（例: "Class 1", "Class 2"）。
         """
-        return []  # empty = let frontend fall back to generic
+        return []
 
     @property
     def _system_label(self) -> str:
-        """Short label describing the system for LLM prompts (e.g. 'HPC tensor data')."""
+        """LLMプロンプト用のシステム短縮ラベル（例: 'HPC tensor data'）"""
         return f"{self.name} data"
 
     @property
     def _time_unit(self) -> str:
-        """Human-readable time unit (e.g. 'time points', 'weekly observations')."""
+        """時間単位の人間可読表現（例: 'time points', 'weekly observations'）"""
         return "time points"
 
     @property
     def _variable_noun(self) -> str:
-        """Noun for variables (e.g. 'variables', 'pollutants')."""
+        """変数の総称名詞（例: 'variables', 'pollutants'）"""
         return "variables"
 
     @property
     def _location_noun(self) -> str:
-        """Noun for spatial locations (e.g. 'locations', 'stations')."""
+        """空間位置の総称名詞（例: 'locations', 'stations'）"""
         return "locations"
 
-    # ── Shared concrete methods ──────────────────────────────────────────────
+    # ── 共通具象メソッド ──────────────────────────────────────────────────────
 
     def _format_features(self, features: List[Dict]) -> str:
-        """Format feature list into readable lines for LLM prompts."""
+        """特徴量リストをLLMプロンプト用の可読テキストに変換する。
+
+        各特徴量について、空間ラベル・変数名・スコア・方向・
+        効果量・有意性を1行にまとめる。
+
+        Args:
+            features: 特徴量辞書のリスト
+
+        Returns:
+            フォーマット済みテキスト（改行区切り）
+        """
         lines = []
         for f in features:
             stat = f.get('statistical_result', {})
             direction = "higher in C1" if stat.get('mean_diff', 0) > 0 else "lower in C1"
-            sig = "*" if stat.get('p_value', 1) < 0.05 else ("+" if stat.get('p_value', 1) < 0.1 else "")
+            # 有意性マーカー: * = p<0.05, + = p<0.1
+            sig = (
+                "*" if stat.get('p_value', 1) < 0.05
+                else ("+" if stat.get('p_value', 1) < 0.1 else "")
+            )
             effect = stat.get('effect_size', 'N/A')
-            
+
             lines.append(
                 f"- {f.get('rack', 'N/A')}/{f.get('variable', 'N/A')}: "
                 f"score={f.get('score', 0):.3f}, {direction}, "
@@ -111,31 +167,57 @@ class BaseDomain(ABC):
     def build_comparison_prompt(
         self,
         analysis_a: Dict[str, Any],
-        analysis_b: Dict[str, Any]
+        analysis_b: Dict[str, Any],
     ) -> str:
-        """Build LLM prompt for comparing two analyses.
-        
-        Uses domain vocabulary hooks (_system_label, _time_unit, etc.) so
-        subclasses get domain-appropriate wording without overriding.
+        """2つの分析結果を比較するLLMプロンプトを構築する。
+
+        ドメイン語彙フック（_system_label, _time_unit 等）を使用し、
+        サブクラスのオーバーライドなしにドメイン適切な表現を生成する。
+
+        Args:
+            analysis_a: 1つ目の分析結果
+            analysis_b: 2つ目の分析結果
+
+        Returns:
+            比較用LLMプロンプト文字列
         """
-        same_cluster1 = analysis_a.get('cluster1_size') == analysis_b.get('cluster1_size')
-        same_cluster2 = analysis_a.get('cluster2_size') == analysis_b.get('cluster2_size')
-        
+        # クラスター選択の一致度を判定
+        same_cluster1 = (
+            analysis_a.get('cluster1_size') == analysis_b.get('cluster1_size')
+        )
+        same_cluster2 = (
+            analysis_a.get('cluster2_size') == analysis_b.get('cluster2_size')
+        )
+
         if same_cluster1 and same_cluster2:
-            context_msg = "Both analyses use IDENTICAL cluster selections. Any differences in results are due to analysis parameters."
+            context_msg = (
+                "Both analyses use IDENTICAL cluster selections. "
+                "Any differences in results are due to analysis parameters."
+            )
         elif same_cluster1:
-            context_msg = "Both analyses share the SAME Red Cluster (C1) as the base. The comparison involves different Blue Cluster (C2) selections."
+            context_msg = (
+                "Both analyses share the SAME Red Cluster (C1) as the base. "
+                "The comparison involves different Blue Cluster (C2) selections."
+            )
         elif same_cluster2:
-            context_msg = "Both analyses share the SAME Blue Cluster (C2) as the base. The comparison involves different Red Cluster (C1) selections."
+            context_msg = (
+                "Both analyses share the SAME Blue Cluster (C2) as the base. "
+                "The comparison involves different Red Cluster (C1) selections."
+            )
         else:
             context_msg = "The analyses use completely different cluster selections."
-        
+
+        # 上位特徴量の集合演算で共通・固有の特徴を算出
         features_a = analysis_a.get('top_features', [])[:10]
         features_b = analysis_b.get('top_features', [])[:10]
-        
-        feature_set_a = set(f"{f.get('rack')}-{f.get('variable')}" for f in features_a)
-        feature_set_b = set(f"{f.get('rack')}-{f.get('variable')}" for f in features_b)
-        
+
+        feature_set_a = set(
+            f"{f.get('rack')}-{f.get('variable')}" for f in features_a
+        )
+        feature_set_b = set(
+            f"{f.get('rack')}-{f.get('variable')}" for f in features_b
+        )
+
         common = feature_set_a & feature_set_b
         only_a = feature_set_a - feature_set_b
         only_b = feature_set_b - feature_set_a
@@ -143,7 +225,7 @@ class BaseDomain(ABC):
         tu = self._time_unit
         vn = self._variable_noun
         ln = self._location_noun
-        
+
         return f"""
 You are comparing two cluster analysis results from a {self._system_label} visualization system.
 
@@ -202,25 +284,23 @@ Generate a JSON comparison with this structure:
 - Do NOT use brackets, asterisks, arrows, or any special formatting - plain text only
 """
 
-    @property
-    def ui_metadata(self) -> Dict[str, Any]:
-        """UI configuration metadata (optional, can be overridden)."""
-        return {
-            "title": f"{self.name} Analysis Dashboard",
-            "description": "Tensor-based comparative analysis"
-        }
-    
+    # ── 可視化設定（サブクラスで上書き可能） ──────────────────────────────────
+
     @property
     def visualization_type(self) -> str:
-        """Spatial visualization type: 'grid' for heatmap, 'geo_map' for geographic map."""
+        """空間可視化のタイプ。
+
+        'grid': ヒートマップ表示（デフォルト、HPC等）
+        'geo_map': 地図表示（大気データ等）
+        """
         return "grid"
-    
+
     def get_coordinates(self) -> List[Dict[str, Any]]:
-        """Return spatial coordinates for geo_map visualization.
-        Override in subclasses that use geo_map visualization.
-        
+        """地理座標データを返す（geo_map可視化用）。
+
+        geo_map を使用するサブクラスでオーバーライドする。
+
         Returns:
-            List of dicts: [{"index": 0, "lat": ..., "lon": ..., "name": "..."}]
+            座標辞書のリスト [{"index": 0, "lat": ..., "lon": ..., "name": "..."}]
         """
         return []
-

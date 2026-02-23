@@ -1,13 +1,25 @@
 """
-API Routes - All endpoint handlers extracted from main_new.py.
+APIルート定義モジュール
 
-Each handler accesses shared dependencies via `request.app.state`.
+全てのエンドポイントハンドラをこのファイルに集約する。
+各ハンドラは `request.app.state` 経由で共有依存オブジェクト
+（ドメイン、データローダー、AIインタープリター等）にアクセスする。
+
+エンドポイント一覧:
+  GET  /api/config           - アプリケーション設定の取得
+  GET  /api/coordinates      - 地理座標の取得（geo_map用）
+  POST /api/compute-embedding - TULCA + PaCMAP 埋め込み計算
+  POST /api/analyze-clusters  - クラスター間差異分析
+  POST /api/interpret-clusters - AI解釈の生成
+  POST /api/compare-analyses  - 2つの分析結果の比較
+  GET  /api/health           - ヘルスチェック
 """
 
-from fastapi import APIRouter, HTTPException, Request
-import numpy as np
 import os
 import logging
+
+import numpy as np
+from fastapi import APIRouter, HTTPException, Request
 
 from app.core import (
     unfold_and_scale_tensor,
@@ -16,6 +28,7 @@ from app.core import (
     get_top_important_factors,
     evaluate_statistical_significance,
 )
+from app.core.tulca import TULCA
 from models import (
     ComputeEmbeddingRequest, ComputeEmbeddingResponse,
     ClusterAnalysisRequest, ClusterAnalysisResponse,
@@ -23,17 +36,27 @@ from models import (
     CompareRequest, CompareResponse,
     ConfigResponse, FeatureImportance, StatisticalResult,
 )
-from tulca import TULCA
 
 logger = logging.getLogger(__name__)
 
+# APIルーターの作成（全エンドポイントに /api プレフィックスを適用）
 router = APIRouter(prefix="/api")
 
 
-# ── Helper ───────────────────────────────────────────────────────────────────
+# ── ヘルパー関数 ─────────────────────────────────────────────────────────────
 
 def _get_tulca_model(state) -> TULCA:
-    """Get or initialize TULCA model from app.state."""
+    """TULCAモデルを取得または初期化する。
+
+    初回呼び出し時にモデルを作成してフィッティングし、
+    以降はキャッシュされたモデルを返す（遅延初期化パターン）。
+
+    Args:
+        state: FastAPIアプリケーションの共有状態
+
+    Returns:
+        フィッティング済みのTULCAモデル
+    """
     if state.tulca_model is None:
         params = state.tulca_params
         state.tulca_model = TULCA(
@@ -47,11 +70,14 @@ def _get_tulca_model(state) -> TULCA:
     return state.tulca_model
 
 
-# ── Endpoints ────────────────────────────────────────────────────────────────
+# ── エンドポイント定義 ────────────────────────────────────────────────────────
 
 @router.get("/config", response_model=ConfigResponse)
 async def get_config(request: Request):
-    """Get application configuration."""
+    """アプリケーション設定を返す。
+
+    フロントエンド初期化時に呼ばれ、変数名・クラス数・色設定等を提供する。
+    """
     s = request.app.state
     return ConfigResponse(
         variables=s.domain.variables,
@@ -65,7 +91,10 @@ async def get_config(request: Request):
 
 @router.get("/coordinates")
 async def get_coordinates(request: Request):
-    """Get spatial coordinates for geo_map visualization."""
+    """空間座標データを返す（geo_map可視化用）。
+
+    ドメインが地理座標を持たない場合は空リストを返す。
+    """
     coords = request.app.state.domain.get_coordinates()
     if not coords:
         return {"coordinates": [], "available": False}
@@ -74,23 +103,37 @@ async def get_coordinates(request: Request):
 
 @router.post("/compute-embedding", response_model=ComputeEmbeddingResponse)
 async def compute_embedding(body: ComputeEmbeddingRequest, request: Request):
-    """Compute TULCA + PaCMAP embedding with given weights."""
+    """TULCA + PaCMAP 埋め込みを計算する。
+
+    処理フロー:
+      1. リクエストからクラス重みを抽出
+      2. TULCAモデルを新しい重みで再最適化
+      3. テンソルデータを低次元空間に射影
+      4. 射影後のテンソルを展開・標準化
+      5. PaCMAPで2次元埋め込みを生成
+    """
     try:
         s = request.app.state
         n_classes = s.data_loader.n_classes
+
+        # クラスごとの重みを抽出
         w_tgs = [body.class_weights[i].w_tg for i in range(n_classes)]
         w_bgs = [body.class_weights[i].w_bg for i in range(n_classes)]
         w_bws = [body.class_weights[i].w_bw for i in range(n_classes)]
 
+        # TULCAモデルの取得と重み再最適化
         model = _get_tulca_model(s)
         model.fit_with_new_weights(w_tgs, w_bgs, w_bws)
 
+        # テンソルの低次元射影
         low_dim_tensor = model.transform(s.data_loader.tensor_X)
         projection_matrices = model.get_projection_matrices()
 
+        # 射影行列の取得（空間モード・変数モード）
         Ms = np.asarray(projection_matrices[0])
         Mv = np.asarray(projection_matrices[1])
 
+        # 展開・標準化と2次元埋め込み
         scaled_data, _ = unfold_and_scale_tensor(low_dim_tensor)
         embedding = apply_pacmap_reduction(scaled_data)
 
@@ -102,41 +145,55 @@ async def compute_embedding(body: ComputeEmbeddingRequest, request: Request):
             labels=s.data_loader.tensor_y.tolist(),
         )
     except Exception as e:
-        logger.exception("Error computing embedding")
+        logger.exception("埋め込み計算中にエラーが発生")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/analyze-clusters", response_model=ClusterAnalysisResponse)
 async def analyze_clusters(body: ClusterAnalysisRequest, request: Request):
-    """Analyze differences between two clusters."""
+    """2つのクラスター間の差異を分析する。
+
+    処理フロー:
+      1. ランダムフォレストで特徴量重要度を算出
+      2. 射影行列を用いて元の空間・変数次元に逆射影（寄与度行列）
+      3. 上位10個の重要因子を特定
+      4. 各因子について統計的有意性を評価（t検定 + Cohen's d）
+    """
     try:
         s = request.app.state
         scaled_data = np.array(body.scaled_data)
         Ms = np.array(body.Ms)
         Mv = np.array(body.Mv)
 
+        # テンソル全体の形状 (時間 x 空間 x 変数)
         T, S, V = s.data_loader.shape
 
+        # 寄与度行列の計算（特徴量重要度 × 射影行列の逆射影）
         contribution_matrix = analyze_tensor_contribution(
             body.cluster1_indices, body.cluster2_indices,
             scaled_data, Ms, Mv, S, V,
         )
 
+        # 上位10個の重要因子を取得
         top_factors = get_top_important_factors(contribution_matrix, s.domain, top_k=10)
 
+        # クラスターの時間軸ラベルを取得
         cluster1_array = np.array(body.cluster1_indices)
         cluster2_array = np.array(body.cluster2_indices)
         cluster1_time = [str(t) for t in s.data_loader.time_axis[cluster1_array]]
         cluster2_time = [str(t) for t in s.data_loader.time_axis[cluster2_array]]
 
+        # 各因子の詳細データを構築
         features = []
         for factor in top_factors:
             rack_idx = factor['rack_idx']
             var_idx = factor['var_idx']
 
+            # 元データから各クラスターの値を抽出
             cluster1_data = s.data_loader.original_data[cluster1_array, rack_idx, var_idx].tolist()
             cluster2_data = s.data_loader.original_data[cluster2_array, rack_idx, var_idx].tolist()
 
+            # 統計的有意性の評価（t検定 + Cohen's d）
             stat_result = evaluate_statistical_significance(
                 body.cluster1_indices, body.cluster2_indices,
                 rack_idx, var_idx,
@@ -164,13 +221,17 @@ async def analyze_clusters(body: ClusterAnalysisRequest, request: Request):
             contribution_matrix=contribution_matrix.tolist(),
         )
     except Exception as e:
-        logger.exception("Error analyzing clusters")
+        logger.exception("クラスター分析中にエラーが発生")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/interpret-clusters", response_model=InterpretationResponse)
 async def interpret_clusters(body: InterpretationRequest, request: Request):
-    """Generate AI interpretation of cluster differences."""
+    """クラスター差異のAI解釈を生成する。
+
+    Gemini API を使用して、特徴量データから自然言語の構造化された解釈を生成する。
+    API が利用できない場合はフォールバック（データベースの要約）を返す。
+    """
     try:
         result = request.app.state.ai_interpreter.interpret(
             body.top_features,
@@ -179,14 +240,19 @@ async def interpret_clusters(body: InterpretationRequest, request: Request):
         )
         return InterpretationResponse(sections=result.get('sections', []))
     except Exception as e:
-        logger.exception("Error interpreting clusters")
+        logger.exception("AI解釈生成中にエラーが発生")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/compare-analyses", response_model=CompareResponse)
 async def compare_analyses(body: CompareRequest, request: Request):
-    """Compare two saved analyses using AI."""
+    """保存された2つの分析結果をAIで比較する。
+
+    各分析のクラスターサイズ、上位特徴量、統計情報を比較し、
+    共通点と差異に関する構造化された解釈を生成する。
+    """
     try:
+        # リクエストボディを分析辞書に変換
         analysis_a = {
             'cluster1_size': body.analysis_a.cluster1_size,
             'cluster2_size': body.analysis_a.cluster2_size,
@@ -210,13 +276,16 @@ async def compare_analyses(body: CompareRequest, request: Request):
         result = request.app.state.ai_interpreter.compare_analyses(analysis_a, analysis_b)
         return CompareResponse(sections=result.get('sections', []))
     except Exception as e:
-        logger.exception("Error comparing analyses")
+        logger.exception("分析比較中にエラーが発生")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/health")
 async def health_check(request: Request):
-    """Health check endpoint."""
+    """ヘルスチェックエンドポイント。
+
+    サーバーの稼働状態、データ読み込み状態、ドメイン設定を返す。
+    """
     s = request.app.state
     return {
         "status": "healthy",

@@ -1,99 +1,117 @@
 /**
- * TypeScript type definitions for Tensor Comparative Visualization
+ * TypeScript 型定義モジュール
+ *
+ * バックエンドAPIのレスポンス型、フロントエンド内部状態の型、
+ * チャートデータの型を一元管理する。
+ * バックエンドの Pydantic モデル (models.py) と対応関係がある。
  */
 
-// API Response Types
+// ── API レスポンス型 ─────────────────────────────────────────────────────────
+
+/** TULCA クラス重みパラメータ（Sidebar スライダーの値） */
 export interface ClassWeight {
+    /** ターゲットクラス内重み */
     w_tg: number;
+    /** クラス間重み */
     w_bw: number;
+    /** 背景重み */
     w_bg: number;
 }
 
-export interface StatisticalResult {
-    rack: string;
-    variable: string;
-    direction: string;
-    mean_diff: number;
-    p_value: number;
-    cohen_d: number;
-    significance: string;
-    effect_size: string;
-}
-
-export interface FeatureImportance {
-    rank: number;
-    rack: string;
-    variable: string;
-    score: number;
-    importance: number;
-    cluster1_data: number[];
-    cluster2_data: number[];
-    cluster1_time: string[];
-    cluster2_time: string[];
-    mean_diff: number;
-    statistical_result: StatisticalResult;
-}
-
-export interface ComputeEmbeddingResponse {
-    embedding: number[][];
-    scaled_data: number[][];
-    Ms: number[][];
-    Mv: number[][];
-    labels: number[];
-}
-
-export interface ClusterAnalysisResponse {
-    top_features: FeatureImportance[];
-    contribution_matrix: number[][];
-}
-
+/** アプリケーション設定レスポンス（GET /api/config） */
 export interface ConfigResponse {
+    /** 変数名リスト（例: ["AirIn", "AirOut", "CPU", "Water"]） */
     variables: string[];
+    /** データセット内のクラス数 */
     n_classes: number;
+    /** 空間グリッドの形状 [行数, 列数] */
     grid_shape: number[];
+    /** UI表示色の設定 */
     colors: {
         class_colors: string[];
         cluster1: string;
         cluster2: string;
     };
-    visualization_type: 'grid' | 'geo_map';
-    class_labels: string[];
+    /** 可視化タイプ: "grid"（ヒートマップ）or "geo_map"（地図） */
+    visualization_type?: string;
+    /** ドメイン固有のクラスラベル（例: ["FY2014", "FY2015", "FY2016"]） */
+    class_labels?: string[];
 }
 
-// Internal State Types
-export interface EmbeddingPoint {
-    x: number;
-    y: number;
-    index: number;
-    label: number;
+/** 統計的有意性の検定結果 */
+export interface StatisticalResult {
+    rack: string;            // 空間ラベル
+    variable: string;        // 変数名
+    direction: string;       // 差の方向（"Higher in Cluster 1" 等）
+    mean_diff: number;       // 平均値の差の絶対値
+    p_value: number;         // p値（Welch t検定）
+    cohen_d: number;         // Cohen's d 効果量
+    significance: string;    // 有意性判定
+    effect_size: string;     // 効果量の解釈
 }
 
-export interface ClusterSelection {
-    cluster1: number[] | null;
-    cluster2: number[] | null;
+/** 特徴量の重要度（統計的分析付き） */
+export interface FeatureImportance {
+    rank: number;                       // 重要度順位（1始まり）
+    rack: string;                       // 空間ラベル
+    variable: string;                   // 変数名
+    score: number;                      // 寄与度スコア（標準化済み）
+    importance: number;                 // 重要度（score と同値）
+    cluster1_data: number[];            // 赤クラスター(C1)の元データ値
+    cluster2_data: number[];            // 青クラスター(C2)の元データ値
+    cluster1_time: string[];            // C1 の時間軸ラベル
+    cluster2_time: string[];            // C2 の時間軸ラベル
+    mean_diff: number;                  // 平均値の差
+    statistical_result: StatisticalResult;  // 統計検定結果
 }
 
-// Chart Data Types
-export interface TimeSeriesDataPoint {
-    time: Date;
-    value: number;
-    cluster: 'cluster1' | 'cluster2';
-}
-
-export interface HeatmapCell {
-    row: number;
-    col: number;
-    value: number;
-    rack: string;
-}
-
-// AI Interpretation Types
+/** AI解釈レスポンスの1セクション */
 export interface InterpretationSection {
-    title: string;
-    text: string;
-    highlights: string[];
+    title: string;          // セクションタイトル（例: "Key Findings"）
+    text: string;           // セクション本文
+    highlights: string[];   // 強調キーワードリスト
 }
 
-export interface InterpretationResponse {
-    sections: InterpretationSection[];
+// ── フロントエンド内部状態型 ──────────────────────────────────────────────────
+
+/** クラスター選択状態（散布図のブラシ選択で更新） */
+export interface ClusterSelection {
+    cluster1: number[] | null;  // 赤クラスターのサンプルインデックス
+    cluster2: number[] | null;  // 青クラスターのサンプルインデックス
+}
+
+/** 保存された分析結果（履歴・比較機能用） */
+export interface SavedAnalysis {
+    id: string;                              // ユニークID
+    timestamp: Date;                         // 保存日時
+    cluster1_indices: number[];              // 赤クラスターのインデックス
+    cluster2_indices: number[];              // 青クラスターのインデックス
+    top_features: FeatureImportance[];       // 上位特徴量
+    interpretation: InterpretationSection[]; // AI解釈セクション
+    contribution_matrix: number[][];         // 寄与度行列 (S x V)
+}
+
+// ── チャートデータ型 ──────────────────────────────────────────────────────────
+
+/** 散布図の1データポイント */
+export interface EmbeddingPoint {
+    x: number;      // PaCMAP 2次元埋め込みの X 座標
+    y: number;      // PaCMAP 2次元埋め込みの Y 座標
+    label: number;  // クラスラベル (0, 1, 2, ...)
+    index: number;  // 元のサンプルインデックス
+}
+
+/** 時系列プロットの1データポイント */
+export interface TimeSeriesDataPoint {
+    time: string;   // 時間軸ラベル
+    value: number;  // 計測値
+}
+
+/** ヒートマップの1セル */
+export interface HeatmapCell {
+    row: number;      // 行インデックス
+    col: number;      // 列インデックス
+    value: number;    // 寄与度スコア
+    label: string;    // 空間ラベル
+    variable: string; // 変数名
 }

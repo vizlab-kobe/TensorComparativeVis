@@ -1,6 +1,15 @@
 /**
- * D3.js Heatmap - Academic research theme
- * Responsive container with refined styling
+ * グリッドヒートマップコンポーネント（D3.js）
+ *
+ * 寄与度行列の空間分布をヒートマップとして可視化する。
+ * HPCドメインでは 36行×24列 のラック配置に対応する。
+ *
+ * 機能:
+ *   - 変数セレクターで表示変数を切り替え
+ *   - YlOrRd カラースケールで寄与度の大きさを表現
+ *   - ホバー時にラックラベルと寄与度値をツールチップ表示
+ *   - カラーレジェンド（グラデーションバー）
+ *   - ResizeObserver によるレスポンシブリサイズ
  */
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, Center, Select, HStack } from '@chakra-ui/react';

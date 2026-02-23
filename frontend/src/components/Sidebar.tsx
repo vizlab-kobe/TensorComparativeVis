@@ -1,6 +1,12 @@
 /**
- * Sidebar component - Academic research theme
- * Clean parameter controls with refined styling
+ * サイドバーコンポーネント
+ *
+ * TULCA パラメータ制御とクラスター選択状態の表示を行う。
+ *
+ * セクション構成:
+ *   1. クラスター選択状態 - C1/C2 の選択サンプル数の表示と解除
+ *   2. TULCA パラメータ   - ターゲットクラス選択、w_tg/w_bw/w_bg スライダー
+ *   3. 実行ボタン         - TULCA 再計算 → PaCMAP 埋め込みのトリガー
  */
 import {
     Box,

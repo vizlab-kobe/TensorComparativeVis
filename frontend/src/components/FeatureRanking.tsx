@@ -1,6 +1,15 @@
 /**
- * Feature Ranking - Diverging Bar Chart
- * Academic research theme with contribution visualization
+ * 特徴量ランキングコンポーネント（ダイバージングバーチャート）
+ *
+ * クラスター間の平均値差 (mean_diff) を左右に分岐する
+ * 横棒グラフで表示する。正方向（右）は C1 の方が高い特徴量、
+ * 負方向（左）は C2 の方が高い特徴量を示す。
+ *
+ * 視覚エンコーディング:
+ *   - バーの長さ: 平均値の差の絶対値
+ *   - バーの色:   C1 側 = cluster1カラー、C2 側 = cluster2カラー
+ *   - バーの透明度: p < 0.05 なら高透明度、それ以外は低透明度
+ *   - アスタリスク(*): 統計的に有意な特徴量
  */
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, Center, HStack, Circle } from '@chakra-ui/react';

@@ -1,6 +1,13 @@
 /**
- * HPC Dashboard - Main Application
- * Academic-style tensor data visualization dashboard
+ * メインアプリケーションコンポーネント
+ *
+ * テンソルデータ比較可視化ダッシュボードのルートコンポーネント。
+ * 2x2 グリッドレイアウトで以下のパネルを配置する:
+ *   - 左上: 散布図（PaCMAP埋め込み結果・ブラシ選択）
+ *   - 右上: 時系列プロット（選択特徴量の時系列比較）
+ *   - 左下: 特徴量ランキング / 寄与度ヒートマップ（タブ切り替え）
+ *   - 右下: AI解釈パネル（LLM要約・履歴・比較）
+ * サイドバーで TULCA 重み調整と分析実行を操作する。
  */
 import { useEffect, useCallback } from 'react';
 import {
@@ -14,7 +21,6 @@ import {
   TabPanels,
   TabPanel,
   useToast,
-  extendTheme,
 } from '@chakra-ui/react';
 import {
   Sidebar,
@@ -26,66 +32,14 @@ import {
 } from './components';
 import { useDashboardStore } from './store/dashboardStore';
 import { getConfig, computeEmbedding, analyzeClusters, interpretClusters } from './api/client';
+import theme from './theme';
 
-// Academic research theme - clean and refined
-const theme = extendTheme({
-  config: {
-    initialColorMode: 'light',
-    useSystemColorMode: false,
-  },
-  styles: {
-    global: {
-      body: {
-        bg: '#ffffff',
-        color: '#333',
-      },
-    },
-  },
-  fonts: {
-    heading: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    body: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  },
-  colors: {
-    brand: {
-      50: '#FDF2EF',
-      100: '#F9DDD5',
-      500: '#E07B54',
-      600: '#D16A43',
-      700: '#C25A33',
-    },
-    academic: {
-      coral: '#E07B54',
-      blue: '#5B8BD0',
-      green: '#6BAF6B',
-      text: '#333',
-      textSecondary: '#666',
-      textMuted: '#888',
-      border: '#e0e0e0',
-      bgSubtle: '#fafafa',
-    },
-  },
-  components: {
-    Button: {
-      defaultProps: {
-        colorScheme: 'brand',
-      },
-    },
-    Tabs: {
-      variants: {
-        line: {
-          tab: {
-            _selected: {
-              color: 'academic.coral',
-              borderColor: 'academic.coral',
-            },
-          },
-        },
-      },
-    },
-  },
-});
+// ---------------------------------------------------------------------------
+// ダッシュボード本体コンポーネント
+// ---------------------------------------------------------------------------
 
 function Dashboard() {
+  // Zustand ストアから状態とアクションを取得
   const {
     setConfig,
     classWeights,
@@ -106,7 +60,7 @@ function Dashboard() {
 
   const toast = useToast();
 
-  // Load config on mount
+  // ── 初回マウント時に設定を読み込む ──
   useEffect(() => {
     async function loadConfig() {
       try {
@@ -126,15 +80,16 @@ function Dashboard() {
     loadConfig();
   }, [setConfig, initializeWeights, toast]);
 
-  // Execute analysis
+  // ── 「Execute」ボタン押下時の分析処理 ──
   const handleExecute = useCallback(async () => {
     if (classWeights.length === 0) return;
 
-    // Clear cluster selections before running new computation
+    // 新規計算前にクラスター選択をリセット
     resetClusters();
     setIsLoading(true);
 
     try {
+      // TULCA + PaCMAP による埋め込み計算
       const embeddingResult = await computeEmbedding(classWeights);
       setEmbeddingData(
         embeddingResult.embedding,
@@ -144,6 +99,7 @@ function Dashboard() {
         embeddingResult.Mv
       );
 
+      // クラスターが既に選択されている場合は自動で分析実行
       if (clusters.cluster1 && clusters.cluster2) {
         const analysisResult = await analyzeClusters(
           clusters.cluster1,
@@ -154,6 +110,7 @@ function Dashboard() {
         );
         setAnalysisResults(analysisResult.top_features, analysisResult.contribution_matrix);
 
+        // AI解釈の生成
         const interpretationResult = await interpretClusters(
           analysisResult.top_features,
           clusters.cluster1.length,
@@ -175,7 +132,7 @@ function Dashboard() {
     }
   }, [classWeights, clusters, resetClusters, setIsLoading, setEmbeddingData, setAnalysisResults, setInterpretation, toast]);
 
-  // Auto-analyze when both clusters are selected
+  // ── 両クラスター選択完了時に自動分析を実行 ──
   useEffect(() => {
     async function analyzeIfReady() {
       if (clusters.cluster1 && clusters.cluster2 && scaledData && Ms && Mv) {
@@ -206,12 +163,13 @@ function Dashboard() {
     analyzeIfReady();
   }, [clusters.cluster1, clusters.cluster2, scaledData, Ms, Mv, setIsLoading, setAnalysisResults, setInterpretation]);
 
+  // ── レイアウト描画 ──
   return (
     <Box display="flex" h="100vh" overflow="hidden" bg="#ffffff">
-      {/* Sidebar */}
+      {/* サイドバー: TULCA重み調整パネル */}
       <Sidebar onExecute={handleExecute} isLoading={isLoading} />
 
-      {/* Main content area */}
+      {/* メインコンテンツ: 2x2 グリッド */}
       <Box flex="1" p={5} overflow="hidden" minW={0}>
         <Grid
           templateRows="1fr 1fr"
@@ -220,17 +178,17 @@ function Dashboard() {
           h="100%"
           w="100%"
         >
-          {/* Scatter Plot (top left) */}
+          {/* 左上: 散布図（PaCMAP埋め込み） */}
           <GridItem overflow="hidden" minW={0} minH={0}>
             <ScatterPlot />
           </GridItem>
 
-          {/* Time Series (top right) */}
+          {/* 右上: 時系列プロット */}
           <GridItem overflow="hidden" minW={0} minH={0}>
             <TimeSeriesPlot />
           </GridItem>
 
-          {/* Feature Ranking / Heatmap tabs (bottom left) */}
+          {/* 左下: 特徴量ランキング / 寄与度ヒートマップ（タブ切り替え） */}
           <GridItem overflow="hidden" minW={0} minH={0}>
             <Box
               bg="white"
@@ -279,7 +237,7 @@ function Dashboard() {
             </Box>
           </GridItem>
 
-          {/* AI Interpretation (bottom right) */}
+          {/* 右下: AI解釈パネル */}
           <GridItem overflow="hidden" minW={0} minH={0}>
             <AIInterpretation />
           </GridItem>
@@ -288,6 +246,10 @@ function Dashboard() {
     </Box>
   );
 }
+
+// ---------------------------------------------------------------------------
+// ルートコンポーネント（Chakra UIプロバイダーでラップ）
+// ---------------------------------------------------------------------------
 
 function App() {
   return (
@@ -298,4 +260,3 @@ function App() {
 }
 
 export default App;
-

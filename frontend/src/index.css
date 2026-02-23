@@ -1,83 +1,97 @@
-/* Google Fonts - Inter for academic styling */
+/* Google Fonts - Inter（アカデミック向けフォント） */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* Global styles - Academic research theme */
+/* ── グローバルスタイル（アカデミック研究テーマ） ────────────────────────── */
 :root {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color: #333;
-  background: #ffffff;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  
-  /* Academic color palette */
-  --color-class-0: #E07B54;
-  --color-class-1: #5B8BD0;
-  --color-class-2: #6BAF6B;
-  --color-cluster-1: #E07B54;
-  --color-cluster-2: #5B8BD0;
-  --color-positive: #E07B54;
-  --color-negative: #5B8BD0;
-  --color-text: #333;
-  --color-text-secondary: #666;
-  --color-text-muted: #888;
-  --color-border: #e0e0e0;
-  --color-bg-panel: #ffffff;
-  --color-bg-subtle: #fafafa;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+    color: #333;
+    background: #ffffff;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+
+    /* ── アカデミックカラーパレット（CSS変数） ──────────────────────────── */
+    /* クラス色（散布図の各クラスの点色） */
+    --color-class-0: #E07B54;
+    --color-class-1: #5B8BD0;
+    --color-class-2: #6BAF6B;
+
+    /* クラスター選択色（ブラシ選択時の赤・青） */
+    --color-cluster-1: #E07B54;
+    --color-cluster-2: #5B8BD0;
+
+    /* 寄与度方向の色 */
+    --color-positive: #E07B54;
+    --color-negative: #5B8BD0;
+
+    /* テキスト色（3階層） */
+    --color-text: #333;
+    --color-text-secondary: #666;
+    --color-text-muted: #888;
+
+    /* UI要素色 */
+    --color-border: #e0e0e0;
+    --color-bg-panel: #ffffff;
+    --color-bg-subtle: #fafafa;
 }
 
+/* リセットスタイル */
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 body {
-  min-height: 100vh;
-  background: #ffffff;
-  overflow: hidden;
+    min-height: 100vh;
+    background: #ffffff;
+    overflow: hidden;        /* ダッシュボード全体でスクロール禁止 */
 }
 
 #root {
-  height: 100vh;
-  width: 100vw;
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    text-align: left;
 }
 
-/* D3 brush styling */
+/* ── D3.js ブラシスタイリング ──────────────────────────────────────────── */
 .brush .selection {
-  fill: rgba(91, 139, 208, 0.15);
-  stroke: rgba(91, 139, 208, 0.5);
-  stroke-width: 1;
+    fill: rgba(91, 139, 208, 0.15);
+    stroke: rgba(91, 139, 208, 0.5);
+    stroke-width: 1;
 }
 
-/* Scrollbar - minimal */
+/* ── スクロールバー（ミニマルデザイン） ────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+    width: 4px;
+    height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 2px;
+    background: #ccc;
+    border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #aaa;
+    background: #aaa;
 }
 
+/* テキスト選択色 */
 ::selection {
-  background: rgba(91, 139, 208, 0.2);
+    background: rgba(91, 139, 208, 0.2);
 }
 
-/* Panel styling */
+/* ── パネル共通スタイル ───────────────────────────────────────────────── */
 .panel {
-  background: var(--color-bg-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
 }

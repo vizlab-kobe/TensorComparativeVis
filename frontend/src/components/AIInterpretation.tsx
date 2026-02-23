@@ -1,6 +1,19 @@
 /**
- * AI Interpretation - Enhanced with History and Compare tabs
- * Structured output with section cards and keyword highlighting
+ * AI解釈コンポーネント（3タブ構成）
+ *
+ * Gemini API による自然言語分析結果を構造化して表示する。
+ *
+ * タブ構成:
+ *   1. Summary  - 現在のクラスター分析の AI 解釈をセクションカードで表示
+ *   2. History  - 過去の分析結果を一覧表示、2件選択して比較可能
+ *   3. Compare  - 2件の分析結果の特徴量差分 + AI 比較分析
+ *
+ * サブコンポーネント:
+ *   - SectionCard:  セクション1件を左ボーダー色付きカードで表示
+ *   - SummaryTab:   解釈セクション一覧 + 「Save to History」ボタン
+ *   - HistoryTab:   保存済み分析のチェックボックスリスト
+ *   - HistoryItem:  1件の保存済み分析のサマリー行
+ *   - CompareTab:   2件の分析の共通/固有特徴量表示 + AI比較
  */
 import React from 'react';
 import {

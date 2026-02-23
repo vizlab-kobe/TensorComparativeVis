@@ -1,5 +1,19 @@
 /**
- * Zustand store for application state management
+ * ダッシュボード状態管理ストア（Zustand）
+ *
+ * アプリケーション全体のグローバル状態を一元管理する。
+ * 各コンポーネントは useDashboardStore() フックで必要な
+ * スライスだけを取得し、状態変更時に自動再レンダリングされる。
+ *
+ * 状態構成:
+ *   - config:         バックエンドから取得したアプリ設定
+ *   - classWeights:   TULCA クラス重み（Sidebar スライダー）
+ *   - embeddingData:  PaCMAP 2次元座標（ScatterPlot）
+ *   - clusters:       ブラシ選択されたクラスターインデックス
+ *   - topFeatures:    ランダムフォレスト特徴量ランキング
+ *   - interpretation: AI解釈結果
+ *   - analysisHistory: 保存済み分析の履歴
+ *   - UI状態:          タブ選択、フォーカス中の特徴量等
  */
 import { create } from 'zustand';
 import type {
@@ -11,16 +25,27 @@ import type {
     InterpretationSection,
 } from '../types';
 
-// Saved analysis for history
+// ── 保存済み分析の型定義 ─────────────────────────────────────────────────────
+
+/** 保存済み分析結果（履歴タブ・比較機能で使用） */
 export interface SavedAnalysis {
+    /** 一意の識別子（タイムスタンプ + ランダム文字列） */
     id: string;
+    /** 保存日時 */
     timestamp: Date;
+    /** 赤クラスターのサンプルインデックス */
     cluster1_indices: number[];
+    /** 青クラスターのサンプルインデックス */
     cluster2_indices: number[];
+    /** 赤クラスターのサンプル数 */
     cluster1_size: number;
+    /** 青クラスターのサンプル数 */
     cluster2_size: number;
+    /** 上位特徴量リスト */
     top_features: FeatureImportance[];
+    /** AI解釈セクション */
     interpretation: InterpretationSection[];
+    /** 集計サマリー（比較プロンプト用） */
     summary: {
         significant_count: number;
         top_variables: string[];
@@ -28,32 +53,34 @@ export interface SavedAnalysis {
     };
 }
 
+// ── ストア状態の型定義 ───────────────────────────────────────────────────────
+
 interface DashboardState {
-    // Config
+    // ── 設定 ──
     config: ConfigResponse | null;
     setConfig: (config: ConfigResponse) => void;
 
-    // Class weights
+    // ── TULCA クラス重み ──
     classWeights: ClassWeight[];
     selectedClass: number;
     setSelectedClass: (classIndex: number) => void;
     updateWeight: (classIndex: number, weight: Partial<ClassWeight>) => void;
     initializeWeights: (nClasses: number) => void;
 
-    // Embedding data
+    // ── 埋め込みデータ ──
     embeddingData: EmbeddingPoint[];
     scaledData: number[][] | null;
-    Ms: number[][] | null;
-    Mv: number[][] | null;
+    Ms: number[][] | null;  // 空間モード射影行列
+    Mv: number[][] | null;  // 変数モード射影行列
     setEmbeddingData: (
         embedding: number[][],
         labels: number[],
         scaledData: number[][],
         Ms: number[][],
-        Mv: number[][]
+        Mv: number[][],
     ) => void;
 
-    // Cluster selection
+    // ── クラスター選択 ──
     clusters: ClusterSelection;
     selectCluster1: (indices: number[]) => void;
     selectCluster2: (indices: number[]) => void;
@@ -61,16 +88,16 @@ interface DashboardState {
     clearCluster2: () => void;
     resetClusters: () => void;
 
-    // Analysis results
+    // ── 分析結果 ──
     topFeatures: FeatureImportance[] | null;
     contributionMatrix: number[][] | null;
     setAnalysisResults: (features: FeatureImportance[], matrix: number[][]) => void;
 
-    // AI Interpretation (structured)
+    // ── AI解釈 ──
     interpretation: InterpretationSection[] | null;
     setInterpretation: (sections: InterpretationSection[]) => void;
 
-    // Analysis History
+    // ── 分析履歴 ──
     analysisHistory: SavedAnalysis[];
     saveCurrentAnalysis: () => void;
     clearHistory: () => void;
@@ -78,7 +105,7 @@ interface DashboardState {
     toggleHistorySelection: (id: string) => void;
     clearHistorySelection: () => void;
 
-    // UI State
+    // ── UI状態 ──
     currentFeatureIndex: number;
     setCurrentFeatureIndex: (index: number) => void;
     activeTab: 'ranking' | 'heatmap';
@@ -88,19 +115,24 @@ interface DashboardState {
     interpretationTab: 'summary' | 'history' | 'compare';
     setInterpretationTab: (tab: 'summary' | 'history' | 'compare') => void;
 
-    // Loading states
+    // ── ローディング状態 ──
     isLoading: boolean;
     setIsLoading: (loading: boolean) => void;
 }
 
+// ── 定数 ─────────────────────────────────────────────────────────────────────
+
+/** 分析履歴の最大保存件数 */
 const MAX_HISTORY_SIZE = 10;
 
+// ── ストア実装 ───────────────────────────────────────────────────────────────
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
-    // Config
+    // ── 設定 ──
     config: null,
     setConfig: (config) => set({ config }),
 
-    // Class weights
+    // ── TULCA クラス重み ──
     classWeights: [],
     selectedClass: 0,
     setSelectedClass: (selectedClass) => set({ selectedClass }),
@@ -110,6 +142,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
                 i === classIndex ? { ...w, ...weight } : w
             ),
         })),
+    /** 全クラスの重みをデフォルト値で初期化する */
     initializeWeights: (nClasses) =>
         set({
             classWeights: Array.from({ length: nClasses }, () => ({
@@ -119,11 +152,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             })),
         }),
 
-    // Embedding data
+    // ── 埋め込みデータ ──
     embeddingData: [],
     scaledData: null,
     Ms: null,
     Mv: null,
+    /**
+     * 埋め込みデータを設定し、分析履歴をリセットする。
+     * TULCA 重みが変更されると射影が変わるため、
+     * 既存の分析履歴は無効になる。
+     */
     setEmbeddingData: (embedding, labels, scaledData, Ms, Mv) =>
         set({
             embeddingData: embedding.map((point, index) => ({
@@ -135,20 +173,25 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             scaledData,
             Ms,
             Mv,
-            // Clear history when embedding changes (new TULCA weights)
+            // 埋め込み変更時に分析履歴をクリア
             analysisHistory: [],
             selectedHistoryIds: [],
         }),
 
-    // Cluster selection
+    // ── クラスター選択 ──
     clusters: { cluster1: null, cluster2: null },
-    // Intentionally resets cluster2: selecting a new C1 starts a fresh comparison
+    /**
+     * 赤クラスター(C1)を選択し、C2をリセットする。
+     * 新しいC1選択は新しい比較の起点となるため、
+     * 意図的にC2もクリアする。
+     */
     selectCluster1: (indices) =>
         set({ clusters: { cluster1: indices, cluster2: null } }),
     selectCluster2: (indices) =>
         set((state) => ({
             clusters: { ...state.clusters, cluster2: indices },
         })),
+    /** C1クリア時に分析結果もリセット */
     clearCluster1: () =>
         set((state) => ({
             clusters: { ...state.clusters, cluster1: null },
@@ -156,6 +199,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             contributionMatrix: null,
             interpretation: null,
         })),
+    /** C2クリア時に分析結果もリセット */
     clearCluster2: () =>
         set((state) => ({
             clusters: { ...state.clusters, cluster2: null },
@@ -163,6 +207,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             contributionMatrix: null,
             interpretation: null,
         })),
+    /** 全クラスター選択と分析結果をリセット */
     resetClusters: () =>
         set({
             clusters: { cluster1: null, cluster2: null },
@@ -171,36 +216,51 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             interpretation: null,
         }),
 
-    // Analysis results
+    // ── 分析結果 ──
     topFeatures: null,
     contributionMatrix: null,
     setAnalysisResults: (features, matrix) =>
         set({ topFeatures: features, contributionMatrix: matrix }),
 
-    // AI Interpretation (structured)
+    // ── AI解釈 ──
     interpretation: null,
     setInterpretation: (interpretation) => set({ interpretation }),
 
-    // Analysis History
+    // ── 分析履歴 ──
     analysisHistory: [],
+    /**
+     * 現在の分析結果を履歴に保存する。
+     *
+     * 有意な特徴量数、上位変数・位置の集計を行い、
+     * SavedAnalysis として先頭に追加する。
+     * MAX_HISTORY_SIZE を超える場合は古いものから削除。
+     */
     saveCurrentAnalysis: () => {
         const state = get();
-        if (!state.clusters.cluster1 || !state.clusters.cluster2 || !state.topFeatures || !state.interpretation) {
+        if (
+            !state.clusters.cluster1 ||
+            !state.clusters.cluster2 ||
+            !state.topFeatures ||
+            !state.interpretation
+        ) {
             return;
         }
 
-        // Calculate summary statistics
+        // サマリー統計の算出
         const significantFeatures = state.topFeatures.filter(
-            f => f.statistical_result.p_value < 0.05
+            (f) => f.statistical_result.p_value < 0.05
         );
-        const variableCounts = state.topFeatures.reduce((acc, f) => {
-            acc[f.variable] = (acc[f.variable] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
+        const variableCounts = state.topFeatures.reduce(
+            (acc, f) => {
+                acc[f.variable] = (acc[f.variable] || 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>
+        );
         const sortedVars = Object.entries(variableCounts)
             .sort((a, b) => b[1] - a[1])
             .map(([v]) => v);
-        const racks = state.topFeatures.slice(0, 5).map(f => f.rack);
+        const racks = state.topFeatures.slice(0, 5).map((f) => f.rack);
 
         const newAnalysis: SavedAnalysis = {
             id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -220,23 +280,31 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
         set((state) => {
             const newHistory = [newAnalysis, ...state.analysisHistory];
-            // Keep only the most recent MAX_HISTORY_SIZE entries
+            // 最新 MAX_HISTORY_SIZE 件のみ保持
             return {
                 analysisHistory: newHistory.slice(0, MAX_HISTORY_SIZE),
             };
         });
     },
     clearHistory: () => set({ analysisHistory: [], selectedHistoryIds: [] }),
+
+    // ── 比較用選択 ──
     selectedHistoryIds: [],
+    /**
+     * 履歴アイテムの選択を切り替える。
+     * 比較は最大2件まで: 3件目の選択は最初の選択を押し出す。
+     */
     toggleHistorySelection: (id: string) => {
         set((state) => {
             const isSelected = state.selectedHistoryIds.includes(id);
             if (isSelected) {
                 return {
-                    selectedHistoryIds: state.selectedHistoryIds.filter(hid => hid !== id),
+                    selectedHistoryIds: state.selectedHistoryIds.filter(
+                        (hid) => hid !== id
+                    ),
                 };
             } else {
-                // Max 2 selections for comparison
+                // 最大2件の選択（FIFOで古い選択を押し出す）
                 const newSelection = [...state.selectedHistoryIds, id].slice(-2);
                 return { selectedHistoryIds: newSelection };
             }
@@ -244,7 +312,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     },
     clearHistorySelection: () => set({ selectedHistoryIds: [] }),
 
-    // UI State
+    // ── UI状態 ──
     currentFeatureIndex: 0,
     setCurrentFeatureIndex: (currentFeatureIndex) => set({ currentFeatureIndex }),
     activeTab: 'ranking',
@@ -254,7 +322,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     interpretationTab: 'summary',
     setInterpretationTab: (interpretationTab) => set({ interpretationTab }),
 
-    // Loading states
+    // ── ローディング状態 ──
     isLoading: false,
     setIsLoading: (isLoading) => set({ isLoading }),
 }));

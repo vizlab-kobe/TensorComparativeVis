@@ -1,7 +1,17 @@
 /**
- * GeoMapVis - US geographic map visualization for spatial feature importance.
- * Renders monitoring station markers on a D3 Albers USA projection,
- * sized and colored by contribution value.
+ * 地理マップ可視化コンポーネント（D3.js + TopoJSON）
+ *
+ * 大気データドメイン用の空間可視化。米国地図上にモニタリング
+ * ステーションをマーカーとして描画し、寄与度の大きさを
+ * 円のサイズと色で表現する。
+ *
+ * 機能:
+ *   - D3 Albers USA 投影による米国地図描画
+ *   - TopoJSON (us-atlas) から州境界を取得
+ *   - バックエンドからステーション座標を遅延読み込み
+ *   - YlOrRd カラースケール + 面積比例スケールのマーカー
+ *   - ホバー時にステーション名と寄与度をツールチップ表示
+ *   - カラーレジェンド（グラデーションバー）
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Text, Center, Select, HStack } from '@chakra-ui/react';

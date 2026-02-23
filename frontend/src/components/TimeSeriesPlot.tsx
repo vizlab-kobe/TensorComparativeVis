@@ -1,7 +1,15 @@
 /**
- * Time Series Plot - Academic research theme
- * Responsive container with refined styling
- * Supports mouse wheel zoom and pan
+ * 時系列プロットコンポーネント（D3.js）
+ *
+ * 選択された特徴量の時系列データを C1/C2 の2系列で描画する。
+ * 特徴量ナビゲーション（前/次ボタン）で上位特徴量を順番に閲覧可能。
+ *
+ * 機能:
+ *   - マウスホイールでズーム、ドラッグでパン
+ *   - 特徴量切り替え時に自動ズームリセット
+ *   - ツールチップによるデータポイント詳細表示
+ *   - フッターに統計情報（p値, Cohen's d, 有意性判定）
+ *   - Clip-path によるチャート領域外の描画抑制
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, HStack, IconButton, Text, Circle, VStack, Tooltip } from '@chakra-ui/react';

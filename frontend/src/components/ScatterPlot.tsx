@@ -1,6 +1,15 @@
 /**
- * D3.js Scatter Plot - Academic research theme
- * Fixed layout, no axes/grid, stable scale
+ * 散布図コンポーネント（D3.js）
+ *
+ * PaCMAP 2次元埋め込みの各サンプルを点として描画する。
+ * ユーザーはブラシ操作で点群を選択し、2つのクラスターを定義する。
+ *
+ * 機能:
+ *   - ResizeObserver によるレスポンシブリサイズ
+ *   - D3 ブラシによるクラスター選択（1回目→C1、2回目→C2、3回目→C1リセット）
+ *   - 選択済みクラスターの楕円ハイライト
+ *   - クラスラベル別の点色（config.colors.class_colors）
+ *   - ScreenshotButton によるPNGエクスポート
  */
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Box, Text, Spinner, HStack, Circle } from '@chakra-ui/react';

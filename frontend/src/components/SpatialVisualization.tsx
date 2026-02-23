@@ -1,9 +1,9 @@
 /**
- * SpatialVisualization - Router component that renders
- * the appropriate spatial visualization based on domain config.
+ * SpatialVisualization - 空間可視化ルーターコンポーネント
  *
- * - "grid"    → GridHeatmap (HPC rack layout)
- * - "geo_map" → GeoMapVis  (US map with station markers)
+ * ドメイン設定に基づいて適切な空間可視化コンポーネントを切り替える:
+ *   - "grid"    → GridHeatmap（HPCラック配置のヒートマップ）
+ *   - "geo_map" → GeoMapVis（米国地図上のステーションマーカー）
  */
 import { useDashboardStore } from '../store/dashboardStore';
 import { Heatmap } from './Heatmap';
@@ -11,12 +11,13 @@ import { GeoMapVis } from './GeoMapVis';
 
 export function SpatialVisualization() {
     const { config } = useDashboardStore();
+    // ドメイン設定から可視化タイプを取得（デフォルト: grid）
     const vizType = config?.visualization_type ?? 'grid';
 
     if (vizType === 'geo_map') {
         return <GeoMapVis />;
     }
 
-    // Default: grid heatmap
+    // デフォルト: グリッドヒートマップ
     return <Heatmap />;
 }

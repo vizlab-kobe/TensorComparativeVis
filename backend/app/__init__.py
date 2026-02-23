@@ -1,4 +1,8 @@
-"""Application package init."""
+"""
+アプリケーションパッケージ初期化モジュール
+
+外部から利用される主要クラス・関数を一括エクスポートする。
+"""
 
 from .domains import BaseDomain, HPCDomain
 from .core import (
@@ -8,7 +12,7 @@ from .core import (
     apply_pacmap_reduction,
     analyze_tensor_contribution,
     get_top_important_factors,
-    evaluate_statistical_significance
+    evaluate_statistical_significance,
 )
 
 __all__ = [
@@ -20,5 +24,5 @@ __all__ = [
     'apply_pacmap_reduction',
     'analyze_tensor_contribution',
     'get_top_important_factors',
-    'evaluate_statistical_significance'
+    'evaluate_statistical_significance',
 ]

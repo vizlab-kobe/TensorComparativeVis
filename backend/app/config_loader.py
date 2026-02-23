@@ -1,6 +1,11 @@
 """
-Configuration loader for TensorComparativeVis.
-Loads YAML config and instantiates the appropriate domain strategy.
+設定ファイルローダーモジュール
+
+YAMLベースの設定ファイルを読み込み、適切なドメイン戦略インスタンスを生成する。
+設定ファイルのパスは以下の優先順位で決定される:
+  1. 関数引数で直接指定
+  2. 環境変数 APP_CONFIG（ファイル名のみ、拡張子省略可）
+  3. デフォルト: "hpc_default.yaml"
 """
 
 import yaml
@@ -10,49 +15,58 @@ from typing import Dict, Any
 
 
 def load_config(config_path: str = None) -> Dict[str, Any]:
-    """Load configuration from YAML file.
-    
+    """YAML設定ファイルを読み込んで辞書として返す。
+
     Args:
-        config_path: Path to config file. If None, uses APP_CONFIG env var or defaults to 'hpc_default.yaml'
-    
+        config_path: 設定ファイルへのパス。
+                     None の場合、環境変数 APP_CONFIG またはデフォルト値を使用。
+
     Returns:
-        Config dictionary
+        設定辞書（ドメイン名、TULCAパラメータ、色設定等を含む）
     """
     if config_path is None:
-        # Check environment variable first
+        # 環境変数からファイル名を取得（デフォルト: hpc_default）
         config_name = os.getenv('APP_CONFIG', 'hpc_default')
         if not config_name.endswith('.yaml'):
             config_name = f"{config_name}.yaml"
+        # プロジェクトルートの configs/ ディレクトリから読み込む
         config_path = Path(__file__).parent.parent.parent / "configs" / config_name
     else:
         config_path = Path(config_path)
-    
+
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
-    
+
     return config
 
 
 def get_domain_instance(config: Dict[str, Any]):
-    """Get domain strategy instance from config.
-    
+    """設定辞書からドメイン戦略インスタンスを生成する。
+
+    ドメイン名（config['domain']）に基づいて、
+    対応するドメインクラスをインスタンス化する。
+
     Args:
-        config: Configuration dictionary
-    
+        config: load_config() で取得した設定辞書
+
     Returns:
-        Domain strategy instance (e.g., HPCDomain())
+        ドメイン戦略インスタンス（HPCDomain / AirDataDomain）
+
+    Raises:
+        ValueError: 未知のドメイン名が指定された場合
     """
     domain_name = config.get('domain', 'hpc').lower()
-    
-    # Resolve data_dir for domains that need it
+
+    # プロジェクトルートパスを解決（データディレクトリの構築に使用）
     project_root = Path(__file__).parent.parent.parent
-    
+
     if domain_name == 'hpc':
         from app.domains import HPCDomain
         return HPCDomain()
     elif domain_name in ('air_data', 'airdata'):
         from app.domains import AirDataDomain
+        # AirDataDomain は座標ファイル読み込みのためにデータディレクトリが必要
         data_dir = str(project_root / "data" / "processed" / "AirData")
         return AirDataDomain(data_dir=data_dir)
     else:
-        raise ValueError(f"Unknown domain: {domain_name}")
+        raise ValueError(f"未知のドメイン: {domain_name}")
