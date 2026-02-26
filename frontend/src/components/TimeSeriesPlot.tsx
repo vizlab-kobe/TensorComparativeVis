@@ -422,29 +422,34 @@ export function TimeSeriesPlot() {
             <Box borderTop="1px solid" borderColor="#e0e0e0" px={4} py={2} flexShrink={0}>
                 <HStack justify="space-between" align="center">
                     {/* Stats with significance badge */}
-                    {stat && (
-                        <HStack spacing={3} fontSize="xs">
-                            <Box
-                                px={2}
-                                py={0.5}
-                                borderRadius="3px"
-                                bg={stat.p_value < 0.05 ? '#e8f5e9' : '#f5f5f5'}
-                                border="1px solid"
-                                borderColor={stat.p_value < 0.05 ? '#c8e6c9' : '#e0e0e0'}
-                            >
-                                <Text
-                                    color={stat.p_value < 0.05 ? '#2e7d32' : '#888'}
-                                    fontWeight="600"
-                                    fontSize="10px"
+                    {stat && (() => {
+                        const effectiveP = stat.adjusted_p_value ?? stat.p_value;
+                        const isSignificant = effectiveP < 0.05;
+                        const pLabel = stat.adjusted_p_value != null ? 'p(FDR)' : 'p';
+                        return (
+                            <HStack spacing={3} fontSize="xs">
+                                <Box
+                                    px={2}
+                                    py={0.5}
+                                    borderRadius="3px"
+                                    bg={isSignificant ? '#e8f5e9' : '#f5f5f5'}
+                                    border="1px solid"
+                                    borderColor={isSignificant ? '#c8e6c9' : '#e0e0e0'}
                                 >
-                                    {stat.p_value < 0.05 ? '✓ Significant' : 'Not Significant'}
+                                    <Text
+                                        color={isSignificant ? '#2e7d32' : '#888'}
+                                        fontWeight="600"
+                                        fontSize="10px"
+                                    >
+                                        {isSignificant ? '✓ Suggests difference' : 'No clear difference'}
+                                    </Text>
+                                </Box>
+                                <Text color="#888">
+                                    {pLabel}={effectiveP.toFixed(3)}, d={stat.cohen_d.toFixed(2)}
                                 </Text>
-                            </Box>
-                            <Text color="#888">
-                                p={stat.p_value.toFixed(3)}, d={stat.cohen_d.toFixed(2)}
-                            </Text>
-                        </HStack>
-                    )}
+                            </HStack>
+                        );
+                    })()}
 
                     {/* Navigation */}
                     <HStack spacing={2}>

@@ -246,9 +246,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             return;
         }
 
-        // サマリー統計の算出
+        // サマリー統計の算出（FDR補正済みp値を優先使用）
         const significantFeatures = state.topFeatures.filter(
-            (f) => f.statistical_result.p_value < 0.05
+            (f) => (f.statistical_result.adjusted_p_value ?? f.statistical_result.p_value) < 0.05
         );
         const variableCounts = state.topFeatures.reduce(
             (acc, f) => {

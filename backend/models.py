@@ -6,7 +6,7 @@ FastAPI エンドポイントで使用される全てのリクエストボディ
 """
 
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 # ── TULCA重み関連 ────────────────────────────────────────────────────────────
@@ -67,16 +67,26 @@ class ClusterAnalysisRequest(BaseModel):
 class StatisticalResult(BaseModel):
     """統計的有意性の検定結果。
 
-    Welch の t検定と Cohen's d 効果量を含む。
+    Welch の t検定、Mann-Whitney U 検定、Cohen's d 効果量、
+    および Benjamini-Hochberg FDR 補正結果を含む。
     """
     rack: str           # 空間ラベル（例: "A1", "Station-5"）
     variable: str       # 変数名（例: "CPU", "PM2.5"）
     direction: str      # 差の方向（"Higher in Cluster 1" 等）
     mean_diff: float    # 平均値の差の絶対値
-    p_value: float      # p値
+    p_value: float      # p値（Welch t検定）
     cohen_d: float      # Cohen's d 効果量
-    significance: str   # 有意性判定（"Significant" / "Not significant"）
+    significance: str   # 有意性判定（探索的表現）
     effect_size: str    # 効果量の解釈（"Large" / "Medium" / "Small" / "Very small"）
+    # Mann-Whitney U 検定結果
+    mwu_p_value: Optional[float] = None
+    mwu_statistic: Optional[float] = None
+    mwu_significance: Optional[str] = None
+    # FDR 補正結果（Benjamini-Hochberg 法）
+    adjusted_p_value: Optional[float] = None
+    fdr_significance: Optional[str] = None
+    adjusted_mwu_p_value: Optional[float] = None
+    fdr_mwu_significance: Optional[str] = None
 
 
 class FeatureImportance(BaseModel):

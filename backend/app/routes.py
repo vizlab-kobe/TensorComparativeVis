@@ -27,6 +27,7 @@ from app.core import (
     analyze_tensor_contribution,
     get_top_important_factors,
     evaluate_statistical_significance,
+    apply_fdr_correction,
 )
 from app.core.tulca import TULCA
 from models import (
@@ -184,7 +185,9 @@ async def analyze_clusters(body: ClusterAnalysisRequest, request: Request):
         cluster2_time = [str(t) for t in s.data_loader.time_axis[cluster2_array]]
 
         # 各因子の詳細データを構築
-        features = []
+        # まず統計検定結果を全因子分まとめて収集する（FDR補正のため）
+        stat_results = []
+        factor_data = []
         for factor in top_factors:
             rack_idx = factor['rack_idx']
             var_idx = factor['var_idx']
@@ -193,13 +196,21 @@ async def analyze_clusters(body: ClusterAnalysisRequest, request: Request):
             cluster1_data = s.data_loader.original_data[cluster1_array, rack_idx, var_idx].tolist()
             cluster2_data = s.data_loader.original_data[cluster2_array, rack_idx, var_idx].tolist()
 
-            # 統計的有意性の評価（t検定 + Cohen's d）
+            # 統計的有意性の評価（Welch t検定 + Mann-Whitney U + Cohen's d）
             stat_result = evaluate_statistical_significance(
                 body.cluster1_indices, body.cluster2_indices,
                 rack_idx, var_idx,
                 s.data_loader.original_data, s.domain,
             )
+            stat_results.append(stat_result)
+            factor_data.append((factor, cluster1_data, cluster2_data))
 
+        # Benjamini-Hochberg FDR 補正を全因子のp値に一括適用
+        apply_fdr_correction(stat_results)
+
+        # 補正済み結果を使って FeatureImportance を構築
+        features = []
+        for (factor, cluster1_data, cluster2_data), stat_result in zip(factor_data, stat_results):
             mean_diff = float(np.mean(cluster1_data) - np.mean(cluster2_data))
 
             features.append(FeatureImportance(

@@ -11,6 +11,7 @@
   4. 射影行列を用いた寄与度行列の計算 (analyze_tensor_contribution)
   5. 上位重要因子の特定 (get_top_important_factors)
   6. 統計的有意性の評価 (evaluate_statistical_significance)
+  7. FDR補正の適用 (apply_fdr_correction)
 """
 
 import numpy as np
@@ -358,6 +359,9 @@ def evaluate_statistical_significance(
             'cohen_d': 0.0,
             'significance': "Cannot determine",
             'effect_size': "Cannot determine",
+            'mwu_p_value': 1.0,
+            'mwu_statistic': 0.0,
+            'mwu_significance': "Cannot determine",
         }
 
     # 分散ゼロの場合の特殊処理
@@ -380,8 +384,11 @@ def evaluate_statistical_significance(
             'mean_diff': mean_diff,
             'p_value': 0.0 if direction != "No difference" else 1.0,
             'cohen_d': float('inf') if direction != "No difference" else 0.0,
-            'significance': "Perfect separation" if direction != "No difference" else "No difference",
+            'significance': "Perfect separation (exploratory)" if direction != "No difference" else "No difference",
             'effect_size': "Infinite" if direction != "No difference" else "None",
+            'mwu_p_value': 0.0 if direction != "No difference" else 1.0,
+            'mwu_statistic': 0.0,
+            'mwu_significance': "Perfect separation (exploratory)" if direction != "No difference" else "No difference",
         }
 
     # Welch の t検定を実施
@@ -396,6 +403,20 @@ def evaluate_statistical_significance(
             p_value = 1.0
     except Exception:
         p_value = 1.0
+
+    # Mann-Whitney U 検定を実施（ノンパラメトリック検定、Welch t検定と併用）
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            mwu_stat, mwu_p = stats.mannwhitneyu(
+                cluster1_values, cluster2_values, alternative='two-sided'
+            )
+        if np.isnan(mwu_p) or np.isnan(mwu_stat):
+            mwu_p = 1.0
+            mwu_stat = 0.0
+    except Exception:
+        mwu_p = 1.0
+        mwu_stat = 0.0
 
     # Cohen's d 効果量を算出
     try:
@@ -419,6 +440,17 @@ def evaluate_statistical_significance(
     else:
         effect_size = "Very small"
 
+    # 探索的分析であることを明示した有意性判定
+    if p_value < 0.05:
+        significance = "Suggests difference (exploratory)"
+    else:
+        significance = "No clear difference (exploratory)"
+
+    if mwu_p < 0.05:
+        mwu_significance = "Suggests difference (exploratory)"
+    else:
+        mwu_significance = "No clear difference (exploratory)"
+
     return {
         'rack': domain.index_to_label(rack_idx),
         'variable': domain.variables[var_idx],
@@ -426,6 +458,93 @@ def evaluate_statistical_significance(
         'mean_diff': float(abs(mean_diff)),
         'p_value': float(p_value),
         'cohen_d': float(abs_cohen_d),
-        'significance': "Significant" if p_value < 0.05 else "Not significant",
+        'significance': significance,
         'effect_size': effect_size,
+        'mwu_p_value': float(mwu_p),
+        'mwu_statistic': float(mwu_stat),
+        'mwu_significance': mwu_significance,
     }
+
+
+# ── FDR補正（Benjamini-Hochberg法） ──────────────────────────────────────────
+
+def apply_fdr_correction(results: List[Dict], alpha: float = 0.05) -> List[Dict]:
+    """複数の統計検定結果に Benjamini-Hochberg 法の FDR 補正を適用する。
+
+    evaluate_statistical_significance の戻り値辞書のリストを受け取り、
+    Welch t検定と Mann-Whitney U 検定の両方の p 値に対して補正を行う。
+
+    BH法の手順:
+      1. p値を昇順にソート
+      2. 各 p値に (m / rank) を掛けて補正
+      3. 大きい方から順に累積最小値を取る（単調性の保証）
+
+    Args:
+        results: evaluate_statistical_significance の戻り値辞書のリスト
+        alpha: 有意水準（デフォルト 0.05）
+
+    Returns:
+        各辞書に adjusted_p_value, fdr_significance,
+        adjusted_mwu_p_value, fdr_mwu_significance を追加したリスト
+    """
+    if not results:
+        return results
+
+    def _bh_adjust(p_values: List[float]) -> List[float]:
+        """BH法による p値補正（手動実装、scipy バージョン非依存）。"""
+        m = len(p_values)
+        if m == 0:
+            return []
+
+        # (元インデックス, p値) のペアを p値昇順でソート
+        indexed = sorted(enumerate(p_values), key=lambda x: x[1])
+
+        # BH補正: p_adj = p * m / rank（rank は 1始まり）
+        adjusted = [0.0] * m
+        for rank_idx, (orig_idx, p) in enumerate(indexed):
+            rank = rank_idx + 1
+            adjusted[orig_idx] = p * m / rank
+
+        # 大きい rank から順に累積最小値を取り、単調性を保証
+        sorted_by_rank = sorted(
+            enumerate(adjusted),
+            key=lambda x: indexed[[i for i, (oi, _) in enumerate(indexed) if oi == x[0]][0]][1],
+        )
+        # より簡潔な方法: ソート順序で処理
+        rank_order = [orig_idx for orig_idx, _ in indexed]
+        cummin = 1.0
+        for i in range(m - 1, -1, -1):
+            orig_idx = rank_order[i]
+            adjusted[orig_idx] = min(adjusted[orig_idx], cummin)
+            adjusted[orig_idx] = min(adjusted[orig_idx], 1.0)  # 1.0 を超えない
+            cummin = adjusted[orig_idx]
+
+        return adjusted
+
+    # Welch t検定の p値を補正
+    welch_pvals = [r.get('p_value', 1.0) for r in results]
+    adjusted_welch = _bh_adjust(welch_pvals)
+
+    # Mann-Whitney U 検定の p値を補正
+    mwu_pvals = [r.get('mwu_p_value', 1.0) for r in results]
+    adjusted_mwu = _bh_adjust(mwu_pvals)
+
+    # 補正結果を各辞書に追加
+    for i, result in enumerate(results):
+        adj_p = adjusted_welch[i]
+        adj_mwu_p = adjusted_mwu[i]
+
+        result['adjusted_p_value'] = adj_p
+        result['fdr_significance'] = (
+            "Significant (FDR-corrected)"
+            if adj_p < alpha
+            else "Not significant (FDR-corrected)"
+        )
+        result['adjusted_mwu_p_value'] = adj_mwu_p
+        result['fdr_mwu_significance'] = (
+            "Significant (FDR-corrected)"
+            if adj_mwu_p < alpha
+            else "Not significant (FDR-corrected)"
+        )
+
+    return results

@@ -75,7 +75,7 @@ export function FeatureRanking() {
             value: f.mean_diff, // positive = higher in C1, negative = higher in C2
             score: f.score,
             rank: f.rank,
-            pValue: f.statistical_result.p_value,
+            pValue: f.statistical_result.adjusted_p_value ?? f.statistical_result.p_value,
             index: i,
         }));
 

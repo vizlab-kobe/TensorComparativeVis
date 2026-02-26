@@ -13,6 +13,7 @@ from .analysis import (
     analyze_tensor_contribution,
     get_top_important_factors,
     evaluate_statistical_significance,
+    apply_fdr_correction,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     'analyze_tensor_contribution',
     'get_top_important_factors',
     'evaluate_statistical_significance',
+    'apply_fdr_correction',
 ]

@@ -46,8 +46,17 @@ export interface StatisticalResult {
     mean_diff: number;       // 平均値の差の絶対値
     p_value: number;         // p値（Welch t検定）
     cohen_d: number;         // Cohen's d 効果量
-    significance: string;    // 有意性判定
+    significance: string;    // 有意性判定（探索的表現）
     effect_size: string;     // 効果量の解釈
+    // Mann-Whitney U 検定結果
+    mwu_p_value?: number;
+    mwu_statistic?: number;
+    mwu_significance?: string;
+    // FDR 補正結果（Benjamini-Hochberg 法）
+    adjusted_p_value?: number;
+    fdr_significance?: string;
+    adjusted_mwu_p_value?: number;
+    fdr_mwu_significance?: string;
 }
 
 /** 特徴量の重要度（統計的分析付き） */
