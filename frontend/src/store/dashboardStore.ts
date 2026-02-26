@@ -12,7 +12,6 @@
  *   - clusters:       ブラシ選択されたクラスターインデックス
  *   - topFeatures:    ランダムフォレスト特徴量ランキング
  *   - interpretation: AI解釈結果
- *   - analysisHistory: 保存済み分析の履歴
  *   - UI状態:          タブ選択、フォーカス中の特徴量等
  */
 import { create } from 'zustand';
@@ -22,36 +21,8 @@ import type {
     ClusterSelection,
     FeatureImportance,
     ConfigResponse,
-    InterpretationSection,
+    InterpretationResult,
 } from '../types';
-
-// ── 保存済み分析の型定義 ─────────────────────────────────────────────────────
-
-/** 保存済み分析結果（履歴タブ・比較機能で使用） */
-export interface SavedAnalysis {
-    /** 一意の識別子（タイムスタンプ + ランダム文字列） */
-    id: string;
-    /** 保存日時 */
-    timestamp: Date;
-    /** 赤クラスターのサンプルインデックス */
-    cluster1_indices: number[];
-    /** 青クラスターのサンプルインデックス */
-    cluster2_indices: number[];
-    /** 赤クラスターのサンプル数 */
-    cluster1_size: number;
-    /** 青クラスターのサンプル数 */
-    cluster2_size: number;
-    /** 上位特徴量リスト */
-    top_features: FeatureImportance[];
-    /** AI解釈セクション */
-    interpretation: InterpretationSection[];
-    /** 集計サマリー（比較プロンプト用） */
-    summary: {
-        significant_count: number;
-        top_variables: string[];
-        top_racks: string[];
-    };
-}
 
 // ── ストア状態の型定義 ───────────────────────────────────────────────────────
 
@@ -94,16 +65,8 @@ interface DashboardState {
     setAnalysisResults: (features: FeatureImportance[], matrix: number[][]) => void;
 
     // ── AI解釈 ──
-    interpretation: InterpretationSection[] | null;
-    setInterpretation: (sections: InterpretationSection[]) => void;
-
-    // ── 分析履歴 ──
-    analysisHistory: SavedAnalysis[];
-    saveCurrentAnalysis: () => void;
-    clearHistory: () => void;
-    selectedHistoryIds: string[];
-    toggleHistorySelection: (id: string) => void;
-    clearHistorySelection: () => void;
+    interpretation: InterpretationResult | null;
+    setInterpretation: (interpretation: InterpretationResult) => void;
 
     // ── UI状態 ──
     currentFeatureIndex: number;
@@ -112,22 +75,15 @@ interface DashboardState {
     setActiveTab: (tab: 'ranking' | 'heatmap') => void;
     selectedVariable: number;
     setSelectedVariable: (variable: number) => void;
-    interpretationTab: 'summary' | 'history' | 'compare';
-    setInterpretationTab: (tab: 'summary' | 'history' | 'compare') => void;
 
     // ── ローディング状態 ──
     isLoading: boolean;
     setIsLoading: (loading: boolean) => void;
 }
 
-// ── 定数 ─────────────────────────────────────────────────────────────────────
-
-/** 分析履歴の最大保存件数 */
-const MAX_HISTORY_SIZE = 10;
-
 // ── ストア実装 ───────────────────────────────────────────────────────────────
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
+export const useDashboardStore = create<DashboardState>((set) => ({
     // ── 設定 ──
     config: null,
     setConfig: (config) => set({ config }),
@@ -158,9 +114,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     Ms: null,
     Mv: null,
     /**
-     * 埋め込みデータを設定し、分析履歴をリセットする。
+     * 埋め込みデータを設定する。
      * TULCA 重みが変更されると射影が変わるため、
-     * 既存の分析履歴は無効になる。
+     * 分析結果をリセットする。
      */
     setEmbeddingData: (embedding, labels, scaledData, Ms, Mv) =>
         set({
@@ -173,9 +129,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             scaledData,
             Ms,
             Mv,
-            // 埋め込み変更時に分析履歴をクリア
-            analysisHistory: [],
-            selectedHistoryIds: [],
         }),
 
     // ── クラスター選択 ──
@@ -226,92 +179,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     interpretation: null,
     setInterpretation: (interpretation) => set({ interpretation }),
 
-    // ── 分析履歴 ──
-    analysisHistory: [],
-    /**
-     * 現在の分析結果を履歴に保存する。
-     *
-     * 有意な特徴量数、上位変数・位置の集計を行い、
-     * SavedAnalysis として先頭に追加する。
-     * MAX_HISTORY_SIZE を超える場合は古いものから削除。
-     */
-    saveCurrentAnalysis: () => {
-        const state = get();
-        if (
-            !state.clusters.cluster1 ||
-            !state.clusters.cluster2 ||
-            !state.topFeatures ||
-            !state.interpretation
-        ) {
-            return;
-        }
-
-        // サマリー統計の算出（FDR補正済みp値を優先使用）
-        const significantFeatures = state.topFeatures.filter(
-            (f) => (f.statistical_result.adjusted_p_value ?? f.statistical_result.p_value) < 0.05
-        );
-        const variableCounts = state.topFeatures.reduce(
-            (acc, f) => {
-                acc[f.variable] = (acc[f.variable] || 0) + 1;
-                return acc;
-            },
-            {} as Record<string, number>
-        );
-        const sortedVars = Object.entries(variableCounts)
-            .sort((a, b) => b[1] - a[1])
-            .map(([v]) => v);
-        const racks = state.topFeatures.slice(0, 5).map((f) => f.rack);
-
-        const newAnalysis: SavedAnalysis = {
-            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            timestamp: new Date(),
-            cluster1_indices: state.clusters.cluster1,
-            cluster2_indices: state.clusters.cluster2,
-            cluster1_size: state.clusters.cluster1.length,
-            cluster2_size: state.clusters.cluster2.length,
-            top_features: state.topFeatures,
-            interpretation: state.interpretation,
-            summary: {
-                significant_count: significantFeatures.length,
-                top_variables: sortedVars.slice(0, 3),
-                top_racks: racks,
-            },
-        };
-
-        set((state) => {
-            const newHistory = [newAnalysis, ...state.analysisHistory];
-            // 最新 MAX_HISTORY_SIZE 件のみ保持
-            return {
-                analysisHistory: newHistory.slice(0, MAX_HISTORY_SIZE),
-            };
-        });
-    },
-    clearHistory: () => set({ analysisHistory: [], selectedHistoryIds: [] }),
-
-    // ── 比較用選択 ──
-    selectedHistoryIds: [],
-    /**
-     * 履歴アイテムの選択を切り替える。
-     * 比較は最大2件まで: 3件目の選択は最初の選択を押し出す。
-     */
-    toggleHistorySelection: (id: string) => {
-        set((state) => {
-            const isSelected = state.selectedHistoryIds.includes(id);
-            if (isSelected) {
-                return {
-                    selectedHistoryIds: state.selectedHistoryIds.filter(
-                        (hid) => hid !== id
-                    ),
-                };
-            } else {
-                // 最大2件の選択（FIFOで古い選択を押し出す）
-                const newSelection = [...state.selectedHistoryIds, id].slice(-2);
-                return { selectedHistoryIds: newSelection };
-            }
-        });
-    },
-    clearHistorySelection: () => set({ selectedHistoryIds: [] }),
-
     // ── UI状態 ──
     currentFeatureIndex: 0,
     setCurrentFeatureIndex: (currentFeatureIndex) => set({ currentFeatureIndex }),
@@ -319,8 +186,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     setActiveTab: (activeTab) => set({ activeTab }),
     selectedVariable: 0,
     setSelectedVariable: (selectedVariable) => set({ selectedVariable }),
-    interpretationTab: 'summary',
-    setInterpretationTab: (interpretationTab) => set({ interpretationTab }),
 
     // ── ローディング状態 ──
     isLoading: false,

@@ -120,93 +120,99 @@ class HPCDomain(BaseDomain):
         return """## HPC Tensor Data Analysis Domain Knowledge
 
 ### Variables
-- The tensor data contains multivariate time-series measurements from a supercomputer
-- Each variable represents a different sensor type: AirIn, AirOut, CPU temperature, Water temperature
-- Variables may have different scales and units
+- AirIn: 吸気温度（サーバーラック前面から取り入れる空気の温度）
+- AirOut: 排気温度（サーバーラック背面から排出される空気の温度）
+- CPU: CPU温度（サーバー内部のプロセッサ温度）
+- Water: 冷却水温度（水冷直接冷却システムの冷却水温度）
 
 ### Spatial Structure
-- Data points are organized in a 2D rack layout representing physical server positions
-- Adjacent racks may exhibit correlated thermal patterns
-- Spatial clustering may indicate localized cooling issues or workload concentration
+- データは36行×24列のラック配置構造上で構成される
+- 隣接ラックは相関した熱パターンを示すことがある
+- 空間的な集中は局所的な冷却問題やワークロード集中を示唆する可能性がある
 
 ### Temporal Patterns
-- Time points are grouped by predefined labels (e.g., job types, workload periods)
-- Cluster comparisons reveal temporal dynamics in system behavior
-- Statistical significance indicates reliable differences in thermal/performance characteristics
+- 時系列データは年度単位（FY2014, FY2015, FY2016）でグループ化されている
+- クラスター比較によりシステムの熱的振る舞いの時間変化が明らかになる
 """
 
     def build_interpretation_prompt(
         self,
-        top_features: List[Dict],
-        cluster1_size: int,
-        cluster2_size: int,
-        preprocessed: Dict[str, Any],
+        features_with_confidence: List[Dict],
+        cluster1_range: Dict[str, Any],
+        cluster2_range: Dict[str, Any],
+        co_occurrences: List[tuple],
+        rack_concentration: str,
+        dominant_variable: str,
     ) -> str:
         """HPCクラスター解釈用のLLMプロンプトを構築する。
 
         スーパーコンピュータの温度データに特化した文脈情報を含む
-        プロンプトを生成し、構造化されたJSON解釈を要求する。
+        プロンプトを生成し、構造化された3フィールドJSON解釈を要求する。
 
         Args:
-            top_features: 上位特徴量リスト
-            cluster1_size: 赤クラスターのサンプル数
-            cluster2_size: 青クラスターのサンプル数
-            preprocessed: 前処理済み統計情報
+            features_with_confidence: confidence ラベル付き上位特徴量リスト
+            cluster1_range: C1 の時間範囲 {"start", "end", "size"}
+            cluster2_range: C2 の時間範囲 {"start", "end", "size"}
+            co_occurrences: 同一位置での変数共起リスト
+            rack_concentration: 空間集中度の文字列
+            dominant_variable: 最頻出変数名
 
         Returns:
             LLMプロンプト文字列
         """
-        features_text = self._format_features(top_features[:30])
+        features_text = self._format_features(features_with_confidence[:30])
+
+        # 共起パターンのテキスト化
+        co_occ_text = "\n".join(
+            f"  - <<{rack}>>: {', '.join(vars_list)}"
+            for rack, vars_list in co_occurrences[:10]
+        ) or "  None detected"
 
         return f"""
-You are an AI assistant that generates structured summaries of tensor data cluster analysis results.
-Your role is to organize and describe the data clearly - NOT to make causal claims or predictions.
+You are an AI assistant analyzing HPC (supercomputer) tensor data cluster comparison results.
+Your role is to organize and describe observed patterns — NOT to make causal claims.
 
 {self.domain_knowledge}
 
-## Analysis Context
-- Red Cluster (Cluster 1): {cluster1_size} time points
-- Blue Cluster (Cluster 2): {cluster2_size} time points
+## Cluster Time Ranges
+- Cluster 1 (Red): {cluster1_range['start']} 〜 {cluster1_range['end']} ({cluster1_range['size']} time points)
+- Cluster 2 (Blue): {cluster2_range['start']} 〜 {cluster2_range['end']} ({cluster2_range['size']} time points)
 
-## Preprocessed Statistics
-- Significant features: {preprocessed['significant_count']}/{preprocessed['total_count']}
-- Dominant variable type: {preprocessed['dominant_variable']}
-- Variable distribution: {preprocessed['variable_distribution']}
-- Average effect size: {preprocessed['avg_effect_size']}
-- Spatial pattern: {preprocessed['rack_concentration']}
-- Co-occurring variables in same location: {len(preprocessed['co_occurrences'])} cases
+## Pattern Summary
+- Dominant variable: {dominant_variable}
+- Spatial pattern: {rack_concentration}
+- Co-occurring variables at same rack:
+{co_occ_text}
 
-## Top Features (up to 30, by contribution score)
+## Top Features (by contribution score, with confidence level)
 {features_text}
 
 ## Output Instructions
-Generate a JSON response with the following structure. Each section should contain natural language text (2-3 sentences) in ENGLISH for academic publication.
-Do NOT use any special formatting like brackets or markdown. Write in plain text.
+
+Generate a JSON response with EXACTLY this structure:
 
 {{
-  "sections": [
-    {{
-      "title": "Key Findings",
-      "text": "Summarize the most important differences. Which variables show the largest differences? Are differences concentrated in specific locations or distributed?",
-      "highlights": []
-    }},
-    {{
-      "title": "Statistical Summary",
-      "text": "Describe the statistical evidence. How many features are statistically significant? What are the effect sizes?",
-      "highlights": []
-    }},
-    {{
-      "title": "Caveats",
-      "text": "Note limitations. Mention cluster size imbalance if present. Note if many features lack statistical significance.",
-      "highlights": []
-    }}
-  ]
+  "comparison_context": {{
+    "text": "Describe what time periods / groups are being compared, and their sizes."
+  }},
+  "separation_factors": {{
+    "text": "Describe the main factors that differentiate the two clusters. Which racks and variables show differences?"
+  }},
+  "suggested_exploration": {{
+    "text": "Suggest what the user should look at next to understand the patterns better."
+  }}
 }}
 
-## Requirements
-- Output ONLY valid JSON, no other text
-- Text should be in ENGLISH (for academic publication)
-- Each section should be 2-3 sentences
-- Focus on DESCRIBING patterns, not explaining causation
-- Do NOT use brackets, asterisks, arrows, or any special formatting - plain text only
+## Formatting Rules
+1. Output ONLY valid JSON, no other text.
+2. Write all text in JAPANESE (日本語で記述してください).
+3. When mentioning rack names or rack-variable combinations, use marker notation: <<C12-Water>> or <<M17>>.
+   Only use names that appear in the feature list above.
+4. Convert confidence labels to natural language:
+   - "strong" → 「明確な差が見られます」
+   - "moderate" → 「差が示唆されます」
+   - "weak" → 「わずかな傾向があります」
+   - "unclear" → 「差は明確ではありません」
+5. Do NOT include raw p-values or Cohen's d numbers in the output text.
+6. Each field's text should be 2-4 sentences.
 """

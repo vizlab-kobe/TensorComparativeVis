@@ -124,52 +124,39 @@ class ClusterAnalysisResponse(BaseModel):
 class InterpretationRequest(BaseModel):
     """AI解釈リクエスト。
 
-    上位特徴量と各クラスターのサイズを渡してLLMに解釈を依頼する。
+    上位特徴量と各クラスターのサイズ・インデックスを渡してLLMに解釈を依頼する。
     """
     top_features: List[Dict[str, Any]]
     cluster1_size: int
     cluster2_size: int
+    cluster1_indices: List[int]
+    cluster2_indices: List[int]
 
 
-class InterpretationSection(BaseModel):
-    """AI解釈の1セクション。
+class ComparisonContext(BaseModel):
+    """比較コンテキスト（時間範囲・サイズ・テキスト）"""
+    cluster1_range: str = "Unknown"
+    cluster2_range: str = "Unknown"
+    cluster1_size: int = 0
+    cluster2_size: int = 0
+    text: str = ""
 
-    Attributes:
-        title: セクションタイトル（例: "Key Findings"）
-        text: セクション本文（自然言語テキスト）
-        highlights: 強調キーワードのリスト
-    """
-    title: str
-    text: str
-    highlights: List[str] = []
+
+class SeparationFactors(BaseModel):
+    """主な分離要因のテキスト"""
+    text: str = ""
+
+
+class SuggestedExploration(BaseModel):
+    """推奨する次のステップのテキスト"""
+    text: str = ""
 
 
 class InterpretationResponse(BaseModel):
-    """AI解釈レスポンス。複数セクションで構成される構造化された解釈結果。"""
-    sections: List[InterpretationSection]
-
-
-# ── 分析比較関連 ──────────────────────────────────────────────────────────────
-
-class AnalysisSummary(BaseModel):
-    """保存された分析の要約情報（比較用）。"""
-    cluster1_size: int
-    cluster2_size: int
-    significant_count: int      # 統計的に有意な特徴量の数
-    top_variables: List[str]    # 上位変数名
-    top_racks: List[str]        # 上位空間ラベル
-    top_features: List[Dict[str, Any]]  # 上位特徴量の詳細
-
-
-class CompareRequest(BaseModel):
-    """2つの分析結果の比較リクエスト。"""
-    analysis_a: AnalysisSummary
-    analysis_b: AnalysisSummary
-
-
-class CompareResponse(BaseModel):
-    """分析比較レスポンス。AI生成の比較セクションを返す。"""
-    sections: List[InterpretationSection]
+    """AI解釈レスポンス。3つの固定セクションで構成される。"""
+    comparison_context: ComparisonContext
+    separation_factors: SeparationFactors
+    suggested_exploration: SuggestedExploration
 
 
 # ── 設定レスポンス ────────────────────────────────────────────────────────────

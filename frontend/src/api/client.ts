@@ -11,10 +11,9 @@
  *   computeEmbedding()    → POST /api/compute-embedding
  *   analyzeClusters()     → POST /api/analyze-clusters
  *   interpretClusters()   → POST /api/interpret-clusters
- *   compareAnalyses()     → POST /api/compare-analyses
  */
 import axios from 'axios';
-import type { ConfigResponse, FeatureImportance, InterpretationSection } from '../types';
+import type { ConfigResponse, FeatureImportance, InterpretationResult } from '../types';
 
 // バックエンドのベースURL（開発環境: localhost:8000）
 const API_BASE = 'http://localhost:8000/api';
@@ -110,62 +109,25 @@ export async function analyzeClusters(
 /**
  * クラスター差異のAI解釈を生成する。
  *
- * 特徴量データをGemini APIに送信し、構造化された
- * 自然言語解釈を受け取る。
+ * 特徴量データとクラスターインデックスをGemini APIに送信し、
+ * 構造化された自然言語解釈を受け取る。
  *
  * @param topFeatures - 上位特徴量リスト
- * @param cluster1Size - 赤クラスターのサンプル数
- * @param cluster2Size - 青クラスターのサンプル数
- * @returns 解釈セクションの配列
+ * @param cluster1Indices - 赤クラスターのインデックス配列
+ * @param cluster2Indices - 青クラスターのインデックス配列
+ * @returns 3フィールドの解釈結果
  */
 export async function interpretClusters(
     topFeatures: FeatureImportance[],
-    cluster1Size: number,
-    cluster2Size: number,
+    cluster1Indices: number[],
+    cluster2Indices: number[],
 ) {
     const res = await axios.post(`${API_BASE}/interpret-clusters`, {
         top_features: topFeatures,
-        cluster1_size: cluster1Size,
-        cluster2_size: cluster2Size,
+        cluster1_size: cluster1Indices.length,
+        cluster2_size: cluster2Indices.length,
+        cluster1_indices: cluster1Indices,
+        cluster2_indices: cluster2Indices,
     });
-    return res.data as {
-        sections: InterpretationSection[];
-    };
-}
-
-/**
- * 2つの保存済み分析結果をAIで比較する。
- *
- * 各分析のクラスターサイズ、上位特徴量、統計情報を比較し、
- * 共通点と差異に関する構造化された解釈を生成する。
- *
- * @param analysisA - 1つ目の分析結果の要約
- * @param analysisB - 2つ目の分析結果の要約
- * @returns 比較セクションの配列
- */
-export async function compareAnalyses(
-    analysisA: {
-        cluster1_size: number;
-        cluster2_size: number;
-        significant_count: number;
-        top_variables: string[];
-        top_racks: string[];
-        top_features: Array<Record<string, unknown>>;
-    },
-    analysisB: {
-        cluster1_size: number;
-        cluster2_size: number;
-        significant_count: number;
-        top_variables: string[];
-        top_racks: string[];
-        top_features: Array<Record<string, unknown>>;
-    },
-) {
-    const res = await axios.post(`${API_BASE}/compare-analyses`, {
-        analysis_a: analysisA,
-        analysis_b: analysisB,
-    });
-    return res.data as {
-        sections: InterpretationSection[];
-    };
+    return res.data as InterpretationResult;
 }

@@ -11,7 +11,6 @@ APIルート定義モジュール
   POST /api/compute-embedding - TULCA + PaCMAP 埋め込み計算
   POST /api/analyze-clusters  - クラスター間差異分析
   POST /api/interpret-clusters - AI解釈の生成
-  POST /api/compare-analyses  - 2つの分析結果の比較
   GET  /api/health           - ヘルスチェック
 """
 
@@ -34,8 +33,8 @@ from models import (
     ComputeEmbeddingRequest, ComputeEmbeddingResponse,
     ClusterAnalysisRequest, ClusterAnalysisResponse,
     InterpretationRequest, InterpretationResponse,
-    CompareRequest, CompareResponse,
     ConfigResponse, FeatureImportance, StatisticalResult,
+    ComparisonContext, SeparationFactors, SuggestedExploration,
 )
 
 logger = logging.getLogger(__name__)
@@ -244,50 +243,27 @@ async def interpret_clusters(body: InterpretationRequest, request: Request):
     API が利用できない場合はフォールバック（データベースの要約）を返す。
     """
     try:
-        result = request.app.state.ai_interpreter.interpret(
-            body.top_features,
-            body.cluster1_size,
-            body.cluster2_size,
+        s = request.app.state
+
+        # タイムスタンプをデータローダーの time_axis から取得
+        timestamps = [str(t) for t in s.data_loader.time_axis]
+
+        result = s.ai_interpreter.interpret(
+            top_features=body.top_features,
+            cluster1_size=body.cluster1_size,
+            cluster2_size=body.cluster2_size,
+            cluster1_indices=body.cluster1_indices,
+            cluster2_indices=body.cluster2_indices,
+            timestamps=timestamps,
         )
-        return InterpretationResponse(sections=result.get('sections', []))
+
+        return InterpretationResponse(
+            comparison_context=ComparisonContext(**result.get('comparison_context', {})),
+            separation_factors=SeparationFactors(**result.get('separation_factors', {})),
+            suggested_exploration=SuggestedExploration(**result.get('suggested_exploration', {})),
+        )
     except Exception as e:
         logger.exception("AI解釈生成中にエラーが発生")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/compare-analyses", response_model=CompareResponse)
-async def compare_analyses(body: CompareRequest, request: Request):
-    """保存された2つの分析結果をAIで比較する。
-
-    各分析のクラスターサイズ、上位特徴量、統計情報を比較し、
-    共通点と差異に関する構造化された解釈を生成する。
-    """
-    try:
-        # リクエストボディを分析辞書に変換
-        analysis_a = {
-            'cluster1_size': body.analysis_a.cluster1_size,
-            'cluster2_size': body.analysis_a.cluster2_size,
-            'summary': {
-                'significant_count': body.analysis_a.significant_count,
-                'top_variables': body.analysis_a.top_variables,
-                'top_racks': body.analysis_a.top_racks,
-            },
-            'top_features': body.analysis_a.top_features,
-        }
-        analysis_b = {
-            'cluster1_size': body.analysis_b.cluster1_size,
-            'cluster2_size': body.analysis_b.cluster2_size,
-            'summary': {
-                'significant_count': body.analysis_b.significant_count,
-                'top_variables': body.analysis_b.top_variables,
-                'top_racks': body.analysis_b.top_racks,
-            },
-            'top_features': body.analysis_b.top_features,
-        }
-        result = request.app.state.ai_interpreter.compare_analyses(analysis_a, analysis_b)
-        return CompareResponse(sections=result.get('sections', []))
-    except Exception as e:
-        logger.exception("分析比較中にエラーが発生")
         raise HTTPException(status_code=500, detail=str(e))
 
 

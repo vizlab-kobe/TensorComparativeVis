@@ -7,7 +7,7 @@
 
 設計方針:
   - 抽象部分: データ固有の設定（変数名、ラベル変換、プロンプト構築）
-  - 具象部分: 共通処理（特徴量フォーマット、比較プロンプト、語彙フック）
+  - 具象部分: 共通処理（特徴量フォーマット、語彙フック）
   - 語彙フック: プロンプト内のドメイン固有表現をサブクラスで上書き可能
 """
 
@@ -83,18 +83,22 @@ class BaseDomain(ABC):
     @abstractmethod
     def build_interpretation_prompt(
         self,
-        top_features: List[Dict],
-        cluster1_size: int,
-        cluster2_size: int,
-        preprocessed: Dict[str, Any],
+        features_with_confidence: List[Dict],
+        cluster1_range: Dict[str, Any],
+        cluster2_range: Dict[str, Any],
+        co_occurrences: List[tuple],
+        rack_concentration: str,
+        dominant_variable: str,
     ) -> str:
         """クラスター解釈用のLLMプロンプトを構築する。
 
         Args:
-            top_features: 上位特徴量のリスト
-            cluster1_size: 赤クラスターのサンプル数
-            cluster2_size: 青クラスターのサンプル数
-            preprocessed: 前処理済み統計情報
+            features_with_confidence: confidence ラベル付き上位特徴量リスト
+            cluster1_range: C1 の時間範囲 {"start", "end", "size"}
+            cluster2_range: C2 の時間範囲 {"start", "end", "size"}
+            co_occurrences: 同一位置での変数共起リスト
+            rack_concentration: 空間集中度の文字列
+            dominant_variable: 最頻出変数名
 
         Returns:
             LLMに送信するプロンプト文字列
@@ -138,10 +142,10 @@ class BaseDomain(ABC):
         """特徴量リストをLLMプロンプト用の可読テキストに変換する。
 
         各特徴量について、空間ラベル・変数名・スコア・方向・
-        効果量・有意性を1行にまとめる。
+        効果量・確信度を1行にまとめる。
 
         Args:
-            features: 特徴量辞書のリスト
+            features: 特徴量辞書のリスト（confidence キー付き）
 
         Returns:
             フォーマット済みテキスト（改行区切り）
@@ -150,139 +154,15 @@ class BaseDomain(ABC):
         for f in features:
             stat = f.get('statistical_result', {})
             direction = "higher in C1" if stat.get('mean_diff', 0) > 0 else "lower in C1"
-            # 有意性マーカー: * = p<0.05, + = p<0.1
-            sig = (
-                "*" if stat.get('p_value', 1) < 0.05
-                else ("+" if stat.get('p_value', 1) < 0.1 else "")
-            )
             effect = stat.get('effect_size', 'N/A')
+            confidence = f.get('confidence', 'unclear')
 
             lines.append(
-                f"- {f.get('rack', 'N/A')}/{f.get('variable', 'N/A')}: "
+                f"- <<{f.get('rack', 'N/A')}-{f.get('variable', 'N/A')}>>: "
                 f"score={f.get('score', 0):.3f}, {direction}, "
-                f"effect={effect}{sig}"
+                f"effect={effect}, confidence={confidence}"
             )
         return "\n".join(lines)
-
-    def build_comparison_prompt(
-        self,
-        analysis_a: Dict[str, Any],
-        analysis_b: Dict[str, Any],
-    ) -> str:
-        """2つの分析結果を比較するLLMプロンプトを構築する。
-
-        ドメイン語彙フック（_system_label, _time_unit 等）を使用し、
-        サブクラスのオーバーライドなしにドメイン適切な表現を生成する。
-
-        Args:
-            analysis_a: 1つ目の分析結果
-            analysis_b: 2つ目の分析結果
-
-        Returns:
-            比較用LLMプロンプト文字列
-        """
-        # クラスター選択の一致度を判定
-        same_cluster1 = (
-            analysis_a.get('cluster1_size') == analysis_b.get('cluster1_size')
-        )
-        same_cluster2 = (
-            analysis_a.get('cluster2_size') == analysis_b.get('cluster2_size')
-        )
-
-        if same_cluster1 and same_cluster2:
-            context_msg = (
-                "Both analyses use IDENTICAL cluster selections. "
-                "Any differences in results are due to analysis parameters."
-            )
-        elif same_cluster1:
-            context_msg = (
-                "Both analyses share the SAME Red Cluster (C1) as the base. "
-                "The comparison involves different Blue Cluster (C2) selections."
-            )
-        elif same_cluster2:
-            context_msg = (
-                "Both analyses share the SAME Blue Cluster (C2) as the base. "
-                "The comparison involves different Red Cluster (C1) selections."
-            )
-        else:
-            context_msg = "The analyses use completely different cluster selections."
-
-        # 上位特徴量の集合演算で共通・固有の特徴を算出
-        features_a = analysis_a.get('top_features', [])[:10]
-        features_b = analysis_b.get('top_features', [])[:10]
-
-        feature_set_a = set(
-            f"{f.get('rack')}-{f.get('variable')}" for f in features_a
-        )
-        feature_set_b = set(
-            f"{f.get('rack')}-{f.get('variable')}" for f in features_b
-        )
-
-        common = feature_set_a & feature_set_b
-        only_a = feature_set_a - feature_set_b
-        only_b = feature_set_b - feature_set_a
-
-        tu = self._time_unit
-        vn = self._variable_noun
-        ln = self._location_noun
-
-        return f"""
-You are comparing two cluster analysis results from a {self._system_label} visualization system.
-
-## Comparison Context
-{context_msg}
-
-## Analysis A
-- Red Cluster size: {analysis_a.get('cluster1_size')} {tu}
-- Blue Cluster size: {analysis_a.get('cluster2_size')} {tu}
-- Significant features: {analysis_a.get('significant_count', 'N/A')}
-- Top {vn}: {', '.join(analysis_a.get('top_variables', [])[:5])}
-- Top {ln}: {', '.join(analysis_a.get('top_racks', [])[:5])}
-
-## Analysis B
-- Red Cluster size: {analysis_b.get('cluster1_size')} {tu}
-- Blue Cluster size: {analysis_b.get('cluster2_size')} {tu}
-- Significant features: {analysis_b.get('significant_count', 'N/A')}
-- Top {vn}: {', '.join(analysis_b.get('top_variables', [])[:5])}
-- Top {ln}: {', '.join(analysis_b.get('top_racks', [])[:5])}
-
-## Feature Overlap
-- Common features (in both): {len(common)} - {list(common)[:5]}
-- Only in A: {len(only_a)} - {list(only_a)[:5]}
-- Only in B: {len(only_b)} - {list(only_b)[:5]}
-
-## Cluster Matching
-- Red Cluster (C1): {"SAME" if same_cluster1 else "DIFFERENT"} (A: {analysis_a.get('cluster1_size')}, B: {analysis_b.get('cluster1_size')})
-- Blue Cluster (C2): {"SAME" if same_cluster2 else "DIFFERENT"} (A: {analysis_a.get('cluster2_size')}, B: {analysis_b.get('cluster2_size')})
-
-Generate a JSON comparison with this structure:
-{{
-  "sections": [
-    {{
-      "title": "Comparison Overview",
-      "text": "Summarize the key differences and similarities between the two analyses.",
-      "highlights": []
-    }},
-    {{
-      "title": "Feature Differences",
-      "text": "Describe which features appear in one analysis but not the other, and what this might indicate.",
-      "highlights": []
-    }},
-    {{
-      "title": "Implications",
-      "text": "What do these differences suggest about the data patterns?",
-      "highlights": []
-    }}
-  ]
-}}
-
-## Requirements
-- Output ONLY valid JSON, no other text
-- Text should be in ENGLISH (for academic publication)
-- Each section should be 2-3 sentences
-- {"Mention that both analyses share the same base cluster" if same_cluster1 or same_cluster2 else "Note that different clusters are compared"}
-- Do NOT use brackets, asterisks, arrows, or any special formatting - plain text only
-"""
 
     # ── 可視化設定（サブクラスで上書き可能） ──────────────────────────────────
 

@@ -33,24 +33,6 @@ export const UI_COLORS = {
     axis: '#888',           // 軸ラベル色
 } as const;
 
-/** AI解釈セクションカードのアクセント色マッピング */
-export const SECTION_COLORS: Record<string, string> = {
-    'key findings': '#2d9596',
-    'pattern analysis': '#27ae60',
-    'statistical summary': '#9467bd',
-    'caveats': '#8c564b',
-};
-
-/**
- * セクションタイトルからアクセント色を取得する
- * @param title - セクションタイトル（大文字小文字不問）
- * @returns 対応するアクセント色のHEXコード
- */
-export function getSectionColor(title: string): string {
-    const key = title.toLowerCase();
-    return SECTION_COLORS[key] || '#555';
-}
-
 // ---------------------------------------------------------------------------
 // Chakra UI テーマ定義
 // ---------------------------------------------------------------------------

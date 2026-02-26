@@ -74,11 +74,32 @@ export interface FeatureImportance {
     statistical_result: StatisticalResult;  // 統計検定結果
 }
 
-/** AI解釈レスポンスの1セクション */
-export interface InterpretationSection {
-    title: string;          // セクションタイトル（例: "Key Findings"）
-    text: string;           // セクション本文
-    highlights: string[];   // 強調キーワードリスト
+// ── AI解釈レスポンス型 ────────────────────────────────────────────────────────
+
+/** AI解釈の比較コンテキスト */
+export interface ComparisonContext {
+    cluster1_range: string;
+    cluster2_range: string;
+    cluster1_size: number;
+    cluster2_size: number;
+    text: string;
+}
+
+/** AI解釈の分離要因 */
+export interface SeparationFactors {
+    text: string;
+}
+
+/** AI解釈の探索提案 */
+export interface SuggestedExploration {
+    text: string;
+}
+
+/** AI解釈レスポンス（3フィールド構造） */
+export interface InterpretationResult {
+    comparison_context: ComparisonContext;
+    separation_factors: SeparationFactors;
+    suggested_exploration: SuggestedExploration;
 }
 
 // ── フロントエンド内部状態型 ──────────────────────────────────────────────────
@@ -87,17 +108,6 @@ export interface InterpretationSection {
 export interface ClusterSelection {
     cluster1: number[] | null;  // 赤クラスターのサンプルインデックス
     cluster2: number[] | null;  // 青クラスターのサンプルインデックス
-}
-
-/** 保存された分析結果（履歴・比較機能用） */
-export interface SavedAnalysis {
-    id: string;                              // ユニークID
-    timestamp: Date;                         // 保存日時
-    cluster1_indices: number[];              // 赤クラスターのインデックス
-    cluster2_indices: number[];              // 青クラスターのインデックス
-    top_features: FeatureImportance[];       // 上位特徴量
-    interpretation: InterpretationSection[]; // AI解釈セクション
-    contribution_matrix: number[][];         // 寄与度行列 (S x V)
 }
 
 // ── チャートデータ型 ──────────────────────────────────────────────────────────

@@ -113,10 +113,10 @@ function Dashboard() {
         // AI解釈の生成
         const interpretationResult = await interpretClusters(
           analysisResult.top_features,
-          clusters.cluster1.length,
-          clusters.cluster2.length
+          clusters.cluster1,
+          clusters.cluster2
         );
-        setInterpretation(interpretationResult.sections);
+        setInterpretation(interpretationResult);
       }
     } catch (error) {
       console.error('Analysis error:', error);
@@ -149,10 +149,10 @@ function Dashboard() {
 
           const interpretationResult = await interpretClusters(
             analysisResult.top_features,
-            clusters.cluster1.length,
-            clusters.cluster2.length
+            clusters.cluster1,
+            clusters.cluster2
           );
-          setInterpretation(interpretationResult.sections);
+          setInterpretation(interpretationResult);
         } catch (error) {
           console.error('Analysis error:', error);
         } finally {

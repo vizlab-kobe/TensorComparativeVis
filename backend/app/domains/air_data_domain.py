@@ -210,76 +210,81 @@ class AirDataDomain(BaseDomain):
 
     def build_interpretation_prompt(
         self,
-        top_features: List[Dict],
-        cluster1_size: int,
-        cluster2_size: int,
-        preprocessed: Dict[str, Any],
+        features_with_confidence: List[Dict],
+        cluster1_range: Dict[str, Any],
+        cluster2_range: Dict[str, Any],
+        co_occurrences: List[tuple],
+        rack_concentration: str,
+        dominant_variable: str,
     ) -> str:
         """大気質クラスター解釈用のLLMプロンプトを構築する。
 
         大気汚染データに特化した文脈情報を含むプロンプトを生成し、
-        構造化されたJSON解釈を要求する。
+        構造化された3フィールドJSON解釈を要求する。
 
         Args:
-            top_features: 上位特徴量リスト
-            cluster1_size: 赤クラスターのサンプル数
-            cluster2_size: 青クラスターのサンプル数
-            preprocessed: 前処理済み統計情報
+            features_with_confidence: confidence ラベル付き上位特徴量リスト
+            cluster1_range: C1 の時間範囲 {"start", "end", "size"}
+            cluster2_range: C2 の時間範囲 {"start", "end", "size"}
+            co_occurrences: 同一位置での変数共起リスト
+            rack_concentration: 空間集中度の文字列
+            dominant_variable: 最頻出変数名
 
         Returns:
             LLMプロンプト文字列
         """
-        features_text = self._format_features(top_features[:30])
+        features_text = self._format_features(features_with_confidence[:30])
+
+        co_occ_text = "\n".join(
+            f"  - <<{station}>>: {', '.join(vars_list)}"
+            for station, vars_list in co_occurrences[:10]
+        ) or "  None detected"
 
         return f"""
-You are an AI assistant that generates structured summaries of air quality data cluster analysis results.
-Your role is to organize and describe the data clearly - NOT to make causal claims or predictions.
+You are an AI assistant analyzing US air quality data cluster comparison results.
+Your role is to organize and describe observed patterns — NOT to make causal claims.
 
 {self.domain_knowledge}
 
-## Analysis Context
-- Red Cluster (Cluster 1): {cluster1_size} time points (weekly observations)
-- Blue Cluster (Cluster 2): {cluster2_size} time points (weekly observations)
+## Cluster Time Ranges
+- Cluster 1 (Red): {cluster1_range['start']} 〜 {cluster1_range['end']} ({cluster1_range['size']} time points)
+- Cluster 2 (Blue): {cluster2_range['start']} 〜 {cluster2_range['end']} ({cluster2_range['size']} time points)
 
-## Preprocessed Statistics
-- Significant features: {preprocessed['significant_count']}/{preprocessed['total_count']}
-- Dominant pollutant type: {preprocessed['dominant_variable']}
-- Variable distribution: {preprocessed['variable_distribution']}
-- Average effect size: {preprocessed['avg_effect_size']}
-- Spatial pattern: {preprocessed['rack_concentration']}
-- Co-occurring pollutants at same station: {len(preprocessed['co_occurrences'])} cases
+## Pattern Summary
+- Dominant pollutant: {dominant_variable}
+- Spatial pattern: {rack_concentration}
+- Co-occurring pollutants at same station:
+{co_occ_text}
 
-## Top Features (up to 30, by contribution score)
+## Top Features (by contribution score, with confidence level)
 {features_text}
 
 ## Output Instructions
-Generate a JSON response with the following structure. Each section should contain natural language text (2-3 sentences) in ENGLISH for academic publication.
-Do NOT use any special formatting like brackets or markdown. Write in plain text.
+
+Generate a JSON response with EXACTLY this structure:
 
 {{
-  "sections": [
-    {{
-      "title": "Key Findings",
-      "text": "Summarize the most important differences. Which pollutants show the largest differences? Are differences concentrated in specific regions or distributed across stations?",
-      "highlights": []
-    }},
-    {{
-      "title": "Statistical Summary",
-      "text": "Describe the statistical evidence. How many features are statistically significant? What are the effect sizes?",
-      "highlights": []
-    }},
-    {{
-      "title": "Caveats",
-      "text": "Note limitations. Mention cluster size imbalance if present. Note if many features lack statistical significance.",
-      "highlights": []
-    }}
-  ]
+  "comparison_context": {{
+    "text": "Describe what time periods / groups are being compared, and their sizes."
+  }},
+  "separation_factors": {{
+    "text": "Describe the main factors that differentiate the two clusters. Which stations and pollutants show differences?"
+  }},
+  "suggested_exploration": {{
+    "text": "Suggest what the user should look at next to understand the patterns better."
+  }}
 }}
 
-## Requirements
-- Output ONLY valid JSON, no other text
-- Text should be in ENGLISH (for academic publication)
-- Each section should be 2-3 sentences
-- Focus on DESCRIBING patterns, not explaining causation
-- Do NOT use brackets, asterisks, arrows, or any special formatting - plain text only
+## Formatting Rules
+1. Output ONLY valid JSON, no other text.
+2. Write all text in JAPANESE (日本語で記述してください).
+3. When mentioning station or station-variable combinations, use marker notation: <<StationName-Ozone>> or <<StationName>>.
+   Only use names that appear in the feature list above.
+4. Convert confidence labels to natural language:
+   - "strong" → 「明確な差が見られます」
+   - "moderate" → 「差が示唆されます」
+   - "weak" → 「わずかな傾向があります」
+   - "unclear" → 「差は明確ではありません」
+5. Do NOT include raw p-values or Cohen's d numbers in the output text.
+6. Each field's text should be 2-4 sentences.
 """

@@ -7,7 +7,6 @@ Gemini APIを使用してクラスター分析結果を自然言語で解釈す�
 
 主な機能:
   - interpret(): 特徴量データからAI解釈を生成
-  - compare_analyses(): 2つの分析結果を比較するAI解釈を生成
   - フォールバック: API不可時はデータベースの簡易要約を返す
 """
 
@@ -65,46 +64,101 @@ class GeminiInterpreter:
         top_features: List[Dict],
         cluster1_size: int,
         cluster2_size: int,
+        cluster1_indices: List[int],
+        cluster2_indices: List[int],
+        timestamps: List[str],
     ) -> Dict[str, Any]:
         """クラスター差異の構造化された解釈を生成する。
 
         処理フロー:
-          1. 特徴量データを前処理してパターンを抽出
-          2. ドメイン戦略からプロンプトを構築
-          3. Gemini APIに送信
-          4. JSONレスポンスをパース
+          1. 時間範囲を算出
+          2. 特徴量データを前処理してパターンを抽出
+          3. ドメイン戦略からプロンプトを構築
+          4. Gemini APIに送信
+          5. JSONレスポンスをパース
 
         Args:
             top_features: 上位特徴量のリスト（辞書形式）
             cluster1_size: 赤クラスターのサンプル数
             cluster2_size: 青クラスターのサンプル数
+            cluster1_indices: クラスタ1に含まれる時点のインデックスリスト
+            cluster2_indices: クラスタ2に含まれる時点のインデックスリスト
+            timestamps: 全時点の日付文字列リスト
 
         Returns:
-            sections キーを含む構造化された解釈辞書
+            comparison_context / separation_factors / suggested_exploration
+            の3フィールドを含む構造化された解釈辞書
         """
         if not self.client or not top_features:
             return self._fallback_interpretation(top_features)
+
+        # 時間範囲の算出
+        time_range1 = self._compute_time_range(cluster1_indices, timestamps)
+        time_range2 = self._compute_time_range(cluster2_indices, timestamps)
 
         # 特徴量データを前処理してコンテキスト情報を抽出
         preprocessed = self._preprocess_features(top_features)
 
         # ドメイン固有のプロンプトを構築
         prompt = self.domain.build_interpretation_prompt(
-            top_features=top_features,
-            cluster1_size=cluster1_size,
-            cluster2_size=cluster2_size,
-            preprocessed=preprocessed,
+            features_with_confidence=preprocessed['features_with_confidence'],
+            cluster1_range=time_range1,
+            cluster2_range=time_range2,
+            co_occurrences=preprocessed['co_occurrences'],
+            rack_concentration=preprocessed['rack_concentration'],
+            dominant_variable=preprocessed['dominant_variable'],
         )
 
         try:
             response = self.client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3-flash-preview',
                 contents=prompt,
             )
             return self._parse_json_response(response.text, top_features)
         except Exception as e:
             logger.error(f"API呼び出しエラー: {e}")
             return self._fallback_interpretation(top_features)
+
+    # ── 時間・確信度ヘルパー ───────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_time_range(
+        indices: List[int], timestamps: List[str],
+    ) -> Dict[str, Any]:
+        """インデックスリストとタイムスタンプリストから時間範囲を算出する。
+
+        Args:
+            indices: 対象クラスタの時点インデックス
+            timestamps: 全時点の日付文字列リスト
+
+        Returns:
+            {"start": str, "end": str, "size": int}
+        """
+        if not indices or not timestamps:
+            return {"start": "Unknown", "end": "Unknown", "size": 0}
+
+        ts = [timestamps[i] for i in sorted(indices) if i < len(timestamps)]
+        if not ts:
+            return {"start": "Unknown", "end": "Unknown", "size": 0}
+
+        return {"start": ts[0], "end": ts[-1], "size": len(indices)}
+
+    @staticmethod
+    def _compute_confidence_label(p_value: float, cohen_d: float) -> str:
+        """p値とCohen's dから確信度ラベルを生成する。
+
+        画面には出さず、プロンプトのコンテキストとしてのみ使用する。
+
+        Returns:
+            "strong" | "moderate" | "weak" | "unclear"
+        """
+        if p_value >= 0.05:
+            return "unclear"
+        if cohen_d >= 0.8:
+            return "strong"
+        if cohen_d >= 0.5:
+            return "moderate"
+        return "weak"
 
     # ── 前処理ヘルパー ────────────────────────────────────────────────────────
 
@@ -127,34 +181,33 @@ class GeminiInterpreter:
         # 空間位置の分布
         racks = [f.get('rack', '') for f in features]
 
-        # 統計的有意性の集計
+        # 統計的有意性の集計（FDR補正後のp値を優先）
         significant_count = sum(
             1 for f in features
-            if f.get('statistical_result', {}).get('p_value', 1) < 0.05
+            if f.get('statistical_result', {}).get(
+                'adjusted_p_value',
+                f.get('statistical_result', {}).get('p_value', 1.0),
+            ) < 0.05
         )
 
-        # 効果量の平均
-        effect_sizes = [
-            abs(f.get('statistical_result', {}).get('cohen_d', 0))
+        # 各因子の確信度ラベルを付与（画面には出さず、プロンプト用）
+        features_with_confidence = [
+            {
+                **f,
+                'confidence': self._compute_confidence_label(
+                    f.get('statistical_result', {}).get('p_value', 1.0),
+                    abs(f.get('statistical_result', {}).get('cohen_d', 0.0)),
+                ),
+            }
             for f in features
         ]
-        avg_effect = sum(effect_sizes) / len(effect_sizes) if effect_sizes else 0
-
-        # 変数分布の文字列表現（プロンプト用）
-        total = len(features)
-        var_dist = ", ".join([
-            f"{v}: {c} ({100 * c / total:.0f}%)"
-            for v, c in var_counts.most_common(4)
-        ])
 
         # 同一場所での変数共起パターンの検出
         rack_vars: Dict[str, List[str]] = {}
         for f in features:
             rack = f.get('rack', '')
             var = f.get('variable', '')
-            if rack not in rack_vars:
-                rack_vars[rack] = []
-            rack_vars[rack].append(var)
+            rack_vars.setdefault(rack, []).append(var)
 
         co_occurrences = [
             (rack, vars_list)
@@ -163,13 +216,14 @@ class GeminiInterpreter:
         ]
 
         return {
-            'total_count': total,
+            'total_count': len(features),
             'significant_count': significant_count,
-            'dominant_variable': var_counts.most_common(1)[0][0] if var_counts else 'N/A',
-            'variable_distribution': var_dist,
-            'avg_effect_size': f"{avg_effect:.2f}",
+            'dominant_variable': (
+                var_counts.most_common(1)[0][0] if var_counts else 'N/A'
+            ),
             'rack_concentration': self._analyze_spatial_pattern(racks),
             'co_occurrences': co_occurrences,
+            'features_with_confidence': features_with_confidence,
         }
 
     def _analyze_spatial_pattern(self, racks: List[str]) -> str:
@@ -201,7 +255,7 @@ class GeminiInterpreter:
     # ── レスポンス解析 ────────────────────────────────────────────────────────
 
     def _parse_json_response(
-        self, response_text: str, features: List[Dict]
+        self, response_text: str, features: List[Dict],
     ) -> Dict[str, Any]:
         """LLMレスポンスからJSONを抽出・パースする。
 
@@ -213,7 +267,7 @@ class GeminiInterpreter:
             features: フォールバック用の特徴量データ
 
         Returns:
-            sections キーを含む解釈辞書
+            新スキーマの3フィールドを含む解釈辞書
         """
         try:
             text = response_text.strip()
@@ -227,8 +281,13 @@ class GeminiInterpreter:
 
             result = json.loads(text.strip())
 
-            # 構造の検証: sections 配列が存在するか
-            if 'sections' in result and isinstance(result['sections'], list):
+            # 構造の検証: 必須3フィールドが存在するか
+            required_keys = {
+                'comparison_context',
+                'separation_factors',
+                'suggested_exploration',
+            }
+            if required_keys.issubset(result.keys()):
                 return result
 
         except json.JSONDecodeError as e:
@@ -252,108 +311,41 @@ class GeminiInterpreter:
         """
         if not features:
             return {
-                "sections": [{
-                    "title": "No Data",
+                "comparison_context": {
+                    "cluster1_range": "Unknown",
+                    "cluster2_range": "Unknown",
+                    "cluster1_size": 0,
+                    "cluster2_size": 0,
                     "text": "No features available for analysis.",
-                    "highlights": [],
-                }]
+                },
+                "separation_factors": {
+                    "text": "No data available.",
+                },
+                "suggested_exploration": {
+                    "text": "Full interpretation requires API access.",
+                },
             }
 
         # 基本的な統計サマリーの生成
         top_vars = list(set(f.get('variable', '') for f in features[:5]))
         top_racks = list(set(f.get('rack', '') for f in features[:5]))
+        top_features_str = [
+            f"{f.get('rack', '?')}-{f.get('variable', '?')}"
+            for f in features[:3]
+        ]
 
         return {
-            "sections": [
-                {
-                    "title": "Key Findings",
-                    "text": (
-                        f"Top differentiating variables: {', '.join(top_vars[:3])}. "
-                        f"Most affected locations: {', '.join(top_racks[:3])}."
-                    ),
-                    "highlights": top_vars[:3],
-                },
-                {
-                    "title": "Statistical Summary",
-                    "text": (
-                        f"Analysis identified {len(features)} important features. "
-                        "Statistical significance varies across features."
-                    ),
-                    "highlights": [],
-                },
-                {
-                    "title": "Caveats",
-                    "text": "This is an automated summary. Full LLM interpretation requires API access.",
-                    "highlights": [],
-                },
-            ]
-        }
-
-    # ── 分析比較 ──────────────────────────────────────────────────────────────
-
-    def compare_analyses(
-        self,
-        analysis_a: Dict[str, Any],
-        analysis_b: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """2つの保存済み分析結果をAIで比較する。
-
-        各分析のクラスターサイズ、上位特徴量、統計情報を
-        ドメイン固有のプロンプトで比較し、構造化された結果を返す。
-
-        Args:
-            analysis_a: 1つ目の分析結果
-            analysis_b: 2つ目の分析結果
-
-        Returns:
-            比較結果の構造化辞書
-        """
-        if not self.client:
-            return self._fallback_comparison(analysis_a, analysis_b)
-
-        # ドメイン固有の比較プロンプトを構築
-        prompt = self.domain.build_comparison_prompt(analysis_a, analysis_b)
-
-        try:
-            response = self.client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-            )
-            return self._parse_json_response(response.text, [])
-        except Exception as e:
-            logger.error(f"分析比較APIエラー: {e}")
-            return self._fallback_comparison(analysis_a, analysis_b)
-
-    def _fallback_comparison(
-        self,
-        analysis_a: Dict[str, Any],
-        analysis_b: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """API不可時の比較フォールバックを返す。
-
-        Args:
-            analysis_a: 1つ目の分析結果
-            analysis_b: 2つ目の分析結果
-
-        Returns:
-            基本的な比較結果の辞書
-        """
-        return {
-            "sections": [
-                {
-                    "title": "Comparison Overview",
-                    "text": (
-                        f"Analysis A has {analysis_a.get('cluster1_size', 0)} vs "
-                        f"{analysis_a.get('cluster2_size', 0)} points. "
-                        f"Analysis B has {analysis_b.get('cluster1_size', 0)} vs "
-                        f"{analysis_b.get('cluster2_size', 0)} points."
-                    ),
-                    "highlights": [],
-                },
-                {
-                    "title": "Feature Differences",
-                    "text": "Detailed comparison requires LLM API access.",
-                    "highlights": [],
-                },
-            ]
+            "comparison_context": {
+                "cluster1_range": "Unknown",
+                "cluster2_range": "Unknown",
+                "cluster1_size": 0,
+                "cluster2_size": 0,
+                "text": "Cluster comparison context unavailable.",
+            },
+            "separation_factors": {
+                "text": f"Top differentiating features: {', '.join(top_features_str)}.",
+            },
+            "suggested_exploration": {
+                "text": "Full interpretation requires API access.",
+            },
         }
