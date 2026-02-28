@@ -8,9 +8,10 @@
  *   2. Separation Factors — 主な分離要因
  *   3. Suggested Exploration — 推奨する探索ステップ
  *
- * テキスト内の <<マーカー>> 記法は表示時に除去する（将来のクリッカブル実装予約）。
+ * テキスト内の <<rack-variable>> マーカーはクリッカブルに変換され、
+ * クリック時に時系列モーダルを表示する。
  */
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     Box,
     VStack,
@@ -20,6 +21,7 @@ import {
 } from '@chakra-ui/react';
 import { useDashboardStore } from '../store/dashboardStore';
 import { ScreenshotButton } from './ScreenshotButton';
+import { TimeSeriesModal } from './TimeSeriesModal';
 import { CLUSTER_COLORS, UI_COLORS } from '../theme';
 
 // Map theme colors to component usage
@@ -48,23 +50,107 @@ const SECTION_STYLE: Record<string, { color: string; label: string }> = {
     },
 };
 
-/**
- * <<...>> マーカーを除去してプレーンテキストとして表示する。
- * 将来的にはクリッカブルなリンクに変換する予定。
- */
-function renderPlainText(text: string): string {
-    return text.replace(/<<([^>]+)>>/g, '$1');
-}
+// ── マーカーパース ────────────────────────────────────────────────────────────
 
 /**
- * 1つのセクションをカードとして表示するコンポーネント。
+ * <<rack-variable>> マーカー文字列を rack と variable に分解する。
+ *
+ * variable 名にハイフンを含む場合（PM2.5 等）やrack 名にハイフンを含む場合
+ * （Station-5 等）に対応するため、既知の variable リストを使った逆方向パースを行う。
+ *
+ * @param markerContent - マーカー内のテキスト（例: "Jefferson-PM2.5", "Rockingham"）
+ * @param variables - 既知の変数名リスト
+ * @returns { rack, variable } — variable が見つからない場合は null
  */
+function parseMarker(
+    markerContent: string,
+    variables: string[],
+): { rack: string; variable: string | null } {
+    // 末尾から既知の variable 名を探す（最長一致）
+    for (const v of variables) {
+        const suffix = `-${v}`;
+        if (markerContent.endsWith(suffix)) {
+            return {
+                rack: markerContent.slice(0, -suffix.length),
+                variable: v,
+            };
+        }
+    }
+    // ハイフンがあっても既知 variable に一致しない → rack 全体参照
+    return { rack: markerContent, variable: null };
+}
+
+// ── クリッカブルテキスト描画 ──────────────────────────────────────────────────
+
+/**
+ * テキスト内の <<...>> マーカーをクリッカブル要素に変換する。
+ * マーカー以外の部分はプレーンテキストとして返す。
+ */
+function renderClickableText(
+    text: string,
+    variables: string[],
+    onMarkerClick: (rack: string, variable: string | null) => void,
+): React.ReactNode {
+    const markerRegex = /<<([^>]+)>>/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let key = 0;
+
+    while ((match = markerRegex.exec(text)) !== null) {
+        // マーカー前のプレーンテキスト
+        if (match.index > lastIndex) {
+            parts.push(text.slice(lastIndex, match.index));
+        }
+
+        // マーカー部分（クリッカブル）
+        const markerContent = match[1];
+        const { rack, variable } = parseMarker(markerContent, variables);
+
+        parts.push(
+            <Text
+                as="span"
+                key={`marker-${key++}`}
+                color={COLORS.cluster1}
+                textDecoration="underline"
+                textDecorationColor={`${COLORS.cluster1}66`}
+                cursor="pointer"
+                fontWeight="600"
+                _hover={{
+                    bg: `${COLORS.cluster1}10`,
+                    borderRadius: '2px',
+                    textDecorationColor: COLORS.cluster1,
+                }}
+                transition="all 0.15s ease"
+                onClick={() => onMarkerClick(rack, variable)}
+            >
+                {variable ? `${rack}-${variable}` : rack}
+            </Text>,
+        );
+
+        lastIndex = match.index + match[0].length;
+    }
+
+    // 残りのプレーンテキスト
+    if (lastIndex < text.length) {
+        parts.push(text.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+}
+
+// ── セクションカード ─────────────────────────────────────────────────────────
+
 function SectionCard({
     sectionKey,
     text,
+    variables,
+    onMarkerClick,
 }: {
     sectionKey: string;
     text: string;
+    variables: string[];
+    onMarkerClick: (rack: string, variable: string | null) => void;
 }) {
     const style = SECTION_STYLE[sectionKey] ?? {
         color: '#555',
@@ -97,17 +183,35 @@ function SectionCard({
                 color={COLORS.text}
                 lineHeight="1.7"
             >
-                {renderPlainText(text)}
+                {renderClickableText(text, variables, onMarkerClick)}
             </Text>
         </Box>
     );
 }
 
-// Main Component
+// ── メインコンポーネント ─────────────────────────────────────────────────────
+
 export function AIInterpretation() {
-    const { interpretation, isLoading, clusters } = useDashboardStore();
+    const { interpretation, isLoading, clusters, config } = useDashboardStore();
     const panelRef = React.useRef<HTMLDivElement>(null);
     const hasBothClusters = clusters.cluster1 && clusters.cluster2;
+
+    // モーダル Localstate
+    const [modalState, setModalState] = useState<{
+        isOpen: boolean;
+        rack: string;
+        variable: string | null;
+    }>({ isOpen: false, rack: '', variable: null });
+
+    const handleMarkerClick = useCallback((rack: string, variable: string | null) => {
+        setModalState({ isOpen: true, rack, variable });
+    }, []);
+
+    const handleModalClose = useCallback(() => {
+        setModalState(prev => ({ ...prev, isOpen: false }));
+    }, []);
+
+    const variables = config?.variables ?? [];
 
     // コンテンツ部分のレンダリング
     const renderContent = () => {
@@ -143,14 +247,20 @@ export function AIInterpretation() {
                     <SectionCard
                         sectionKey="comparison_context"
                         text={interpretation.comparison_context.text}
+                        variables={variables}
+                        onMarkerClick={handleMarkerClick}
                     />
                     <SectionCard
                         sectionKey="separation_factors"
                         text={interpretation.separation_factors.text}
+                        variables={variables}
+                        onMarkerClick={handleMarkerClick}
                     />
                     <SectionCard
                         sectionKey="suggested_exploration"
                         text={interpretation.suggested_exploration.text}
+                        variables={variables}
+                        onMarkerClick={handleMarkerClick}
                     />
                 </VStack>
             </Box>
@@ -181,6 +291,14 @@ export function AIInterpretation() {
 
             {/* Content */}
             {renderContent()}
+
+            {/* Time Series Modal */}
+            <TimeSeriesModal
+                isOpen={modalState.isOpen}
+                onClose={handleModalClose}
+                rack={modalState.rack}
+                variable={modalState.variable}
+            />
         </Box>
     );
 }
