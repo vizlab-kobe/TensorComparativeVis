@@ -1,75 +1,81 @@
 # TensorComparativeVis
 
-TensorComparativeVis is a human-in-the-loop visual analytics framework for exploratory comparative analysis of multivariate time-series data represented as high-order tensors. The system enables analysts to discover and interpret nonlinear patterns that may not correspond to predefined group labels.
+TensorComparativeVis は、高階テンソルとして表現された多変量時系列データの探索的比較分析を支援する、Human-in-the-Loop 型ビジュアルアナリティクスフレームワークです。事前定義されたグループラベルに依存せず、非線形パターンの発見と解釈を可能にします。
 
-## Key Features
+## 主な機能
 
-- **Exploratory Comparison**: Interactively select arbitrary clusters from 2D scatterplots without being constrained by predefined group labels, enabling discovery of localized temporal anomalies and unexpected patterns.
+- **探索的比較分析**: 2D 散布図上で任意のクラスタをインタラクティブに選択し、局所的な時間的異常や予期しないパターンを発見
+- **テンソルベース分析**: TULCA（Tensor Unified Linear Comparative Analysis）による柔軟なコアテンソル抽出と PaCMAP による非線形次元削減を組み合わせ、潜在構造を保持した可視化を実現
+- **定量的解釈**: Random Forest による特徴量重要度分析と逆投影を通じて、時間・空間・変数の影響度の高い組み合わせを特定。統計的検証（Welch の t 検定、Mann-Whitney U 検定、Cohen's d 効果量、Benjamini-Hochberg FDR 補正）付き
+- **LLM による自然言語解釈**: Google Gemini API を活用し、定量的結果とドメイン知識を統合した自然言語での解釈を自動生成
+- **比較分析サポート**: 複数の分析結果を保存・比較し、探索的比較を一貫した調査ストーリーに統合
+- **ドメイン非依存アーキテクチャ**: YAML 設定ファイルとドメイン戦略パターンにより、異なるデータドメイン（HPC、大気データ等）に柔軟に対応
+- **時系列詳細モーダル**: 特徴量ランキングから直接時系列データの詳細を確認可能なインタラクティブモーダル
 
-- **Tensor-Based Analysis**: Combines TULCA (Tensor Unified Linear Comparative Analysis) for flexible core tensor extraction with PaCMAP for nonlinear dimensionality reduction, preserving meaningful latent structures in visualization.
+## ワークフロー
 
-- **Quantitative Interpretation**: Identifies influential combinations of temporal, spatial, and variable elements through back-projected feature importance analysis with statistical validation (Welch's t-test, Cohen's d effect sizes).
+本フレームワークは以下の2つの反復的フェーズで動作します：
 
-- **LLM-Based Explanation**: Generates natural language interpretations using large language models, synthesizing quantitative results with domain knowledge to reduce cognitive load during iterative exploration.
+1. **潜在パターン抽出と可視化**: ラベル付きテンソルデータに対し、TULCA によるコアテンソル抽出 → PaCMAP による非線形次元削減 → 2D 散布図への可視化を実行
+2. **探索的比較と解釈**: 散布図上でクラスタを対話的に選択 → Random Forest による特徴量重要度の算出 → 元データ空間への逆投影 → 統計的検定による差異の検証 → LLM による自然言語解釈の生成
 
-- **Comparative Analysis Support**: Compares multiple analysis results across different cluster selections, helping analysts connect exploratory comparisons into coherent investigative narratives.
+## 技術スタック
 
-## Workflow
+| レイヤー | 技術 |
+|---------|------|
+| **フロントエンド** | React 19 + TypeScript, Chakra UI, D3.js, Zustand |
+| **バックエンド** | FastAPI + Python 3.9+ |
+| **AI 解釈** | Google Gemini API |
+| **分析** | TULCA, PaCMAP, Random Forest, SciPy (統計検定) |
 
-The framework operates in two iterative phases:
+## クイックスタート
 
-1. **Latent Pattern Extraction and Visualization**: Labeled tensor data is processed through TULCA core tensor extraction, nonlinear dimensionality reduction via PaCMAP, and 2D scatterplot visualization.
+### 前提条件
 
-2. **Exploratory Comparison and Interpretation**: Analysts interactively select clusters, compute feature importance via random forest classification, back-project importance scores to the original data space, validate differences through statistical tests, and generate natural language interpretations.
-
-## Tech Stack
-
-- **Frontend**: React 19 + TypeScript, Chakra UI, D3.js, Zustand
-- **Backend**: FastAPI + Python 3.9+
-- **AI**: Google Gemini API
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+ and npm
+- Node.js 18+ および npm
 - Python 3.9+
+- Google Gemini API キー（LLM 機能を使用する場合）
 
-### Data Setup
+### データの配置
 
-Place tensor data files in `data/processed/`:
+テンソルデータを `data/processed/` に配置します：
 
 ```
 data/processed/
-├── tensor_X.npy      # Standardized tensor (T, S, V)
-├── tensor_y.npy      # Class labels
-├── time_axis.npy     # Timestamps
-└── time_original.npy # Original values
+├── tensor_X.npy      # 標準化テンソル (T, S, V)
+├── tensor_y.npy      # クラスラベル
+├── time_axis.npy     # タイムスタンプ
+└── time_original.npy # 元データ値
 ```
 
-### Backend Setup
+### バックエンドのセットアップ
 
 ```bash
 cd backend
 
-# Create virtual environment (recommended)
+# 仮想環境の作成（推奨）
 python -m venv venv
 .\venv\Scripts\activate  # Windows
 # source venv/bin/activate  # macOS/Linux
 
-# Install dependencies
+# 依存パッケージのインストール
 pip install -r requirements.txt
 
-# Set Gemini API key (optional, for LLM features)
-# Create .env file with: GEMINI_API_KEY=your_key_here
+# Gemini API キーの設定（LLM 機能を使用する場合）
+# .env ファイルを作成し、以下を記載: GEMINI_API_KEY=your_key_here
 
-# Run the server
+# ドメイン設定の指定（環境変数で切り替え可能、デフォルト: hpc_default）
+# set APP_CONFIG=air_data  # Windows
+# export APP_CONFIG=air_data  # macOS/Linux
+
+# サーバーの起動
 uvicorn main:app --reload --port 8000
 ```
 
-API: `http://localhost:8000` | Docs: `http://localhost:8000/docs`
+- API: `http://localhost:8000`
+- Swagger UI ドキュメント: `http://localhost:8000/docs`
 
-### Frontend Setup
+### フロントエンドのセットアップ
 
 ```bash
 cd frontend
@@ -77,43 +83,76 @@ npm install
 npm run dev
 ```
 
-App: `http://localhost:5173`
+- アプリケーション: `http://localhost:5173`
 
-## Project Structure
+## プロジェクト構成
 
 ```
 TensorComparativeVis/
+├── configs/                        # ドメイン別 YAML 設定ファイル
+│   ├── hpc_default.yaml            #   HPC スーパーコンピュータデータ用
+│   └── air_data.yaml               #   米国大気質データ用
+│
 ├── backend/
-│   ├── main.py           # FastAPI endpoints
-│   ├── tulca.py          # TULCA algorithm
-│   ├── analysis.py       # Feature importance analysis
-│   ├── interpreter.py    # LLM-based interpretation
-│   ├── data_loader.py    # Data loading utilities
-│   └── models.py         # Pydantic schemas
+│   ├── main.py                     # FastAPI エントリーポイント
+│   ├── models.py                   # Pydantic スキーマ定義
+│   └── app/
+│       ├── config_loader.py        # YAML 設定読み込み・ドメイン生成
+│       ├── routes.py               # 全 API エンドポイント
+│       ├── core/                   # コアロジック
+│       │   ├── tulca.py            #   TULCA アルゴリズム
+│       │   ├── analysis.py         #   特徴量重要度・統計分析
+│       │   ├── interpreter.py      #   Gemini API 連携 LLM 解釈
+│       │   └── data_loader.py      #   テンソルデータ読み込み
+│       └── domains/                # ドメイン戦略パターン
+│           ├── base_domain.py      #   基底クラス（抽象インターフェース）
+│           ├── hpc_domain.py       #   HPC ドメイン実装
+│           └── air_data_domain.py  #   大気データドメイン実装
 │
 ├── frontend/src/
-│   ├── App.tsx           # Main application
-│   ├── components/       # React components
-│   │   ├── ScatterPlot   # 2D embedding with lasso selection
-│   │   ├── FeatureRanking# Feature importance visualization
-│   │   ├── Heatmap       # Contribution heatmap
-│   │   ├── TimeSeriesPlot# Time series comparison
-│   │   └── AIInterpretation # LLM summary panel
-│   ├── store/            # Zustand state management
-│   └── api/              # API client
+│   ├── App.tsx                     # メインダッシュボードレイアウト
+│   ├── theme.ts                    # Chakra UI テーマ設定
+│   ├── components/
+│   │   ├── ScatterPlot.tsx         #   2D 埋め込み＋投げ縄選択
+│   │   ├── FeatureRanking.tsx      #   特徴量重要度ランキング
+│   │   ├── Heatmap.tsx             #   寄与度ヒートマップ
+│   │   ├── TimeSeriesPlot.tsx      #   時系列比較プロット
+│   │   ├── TimeSeriesModal.tsx     #   時系列詳細モーダル
+│   │   ├── AIInterpretation.tsx    #   LLM 解釈パネル
+│   │   ├── Sidebar.tsx             #   パラメータ設定サイドバー
+│   │   ├── GeoMapVis.tsx           #   地理的可視化
+│   │   ├── SpatialVisualization.tsx#   空間可視化ラッパー
+│   │   └── ScreenshotButton.tsx    #   スクリーンショット機能
+│   ├── store/                      # Zustand 状態管理
+│   ├── api/                        # API クライアント
+│   └── types/                      # TypeScript 型定義
 │
-└── data/                 # Tensor data (gitignored)
+└── data/                           # テンソルデータ（gitignore 対象）
 ```
 
-## Usage
+## 使い方
 
-1. **Configure Weights**: Adjust TULCA weight parameters (w_tg, w_bw, w_bg) in sidebar
-2. **Execute Analysis**: Click "Execute Analysis" to compute embedding
-3. **Select Clusters**: Use lasso tool to select Red (Cluster 1) and Blue (Cluster 2) regions
-4. **View Results**: Analysis runs automatically when both clusters are selected
-5. **Save Analysis**: Click "Save" to store current analysis for later comparison
-6. **Compare**: Select 2 saved analyses and click "Compare" for LLM-generated comparison
+1. **パラメータの設定**: サイドバーで TULCA の重みパラメータ（w_tg, w_bw, w_bg）を調整
+2. **分析の実行**: 「Execute Analysis」ボタンをクリックして埋め込みを計算
+3. **クラスタの選択**: 投げ縄ツールで散布図上の Red（クラスタ1）と Blue（クラスタ2）領域を選択
+4. **結果の確認**: 両クラスタが選択されると自動的に分析が実行され、特徴量ランキング・ヒートマップ・時系列比較・AI 解釈が表示
+5. **分析の保存**: 「Save」ボタンで現在の分析結果を保存
+6. **比較分析**: 保存した2つの分析を選択し「Compare」ボタンで LLM による比較解釈を生成
 
-## License
+## ドメインの追加方法
+
+新しいデータドメインを追加するには：
+
+1. `backend/app/domains/` に `BaseDomain` を継承した新しいドメインクラスを作成
+2. `configs/` に対応する YAML 設定ファイルを作成
+3. 環境変数 `APP_CONFIG` でドメインを切り替え
+
+```bash
+# 例: 大気データドメインで起動
+set APP_CONFIG=air_data  # Windows
+uvicorn main:app --reload --port 8000
+```
+
+## ライセンス
 
 BSD-3-Clause
